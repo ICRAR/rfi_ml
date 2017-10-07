@@ -70,30 +70,30 @@ class GmrtCNN(nn.Module):
 
 def main():
     parser = argparse.ArgumentParser(description='GMRT CNN Training')
-    parser.add_argument('--batch-size', type=int, default=5000, metavar='N', help='input batch size for training (default: 5000)')
-    parser.add_argument('--epochs', type=int, default=5, metavar='N', help='number of epochs to train (default: 10)')
-    parser.add_argument('--learning_rate', type=float, default=0.01, metavar='LR', help='learning rate (default: 0.01)')
+    parser.add_argument('--batch-size', type=int, default=10000, metavar='N', help='input batch size for training (default: 10000)')
+    parser.add_argument('--epochs', type=int, default=2, metavar='N', help='number of epochs to train (default: 5)')       # TODO:
+    parser.add_argument('--learning-rate', type=float, default=0.01, metavar='LR', help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--num-processes', type=int, default=4, metavar='N', help='how many training processes to use (default: 4)')
-    parser.add_argument('--use_gpu', action='store_true', help='use the GPU if it is available', default=False)
-    parser.add_argument('--data_path', default='./data', help='the path to the data file')
-    parser.add_argument('--data_file', default='data.h5', help='the name of the data file')
-    parser.add_argument('--sequence_length', type=int, default=16, help='how many elements in a sequence')
-    parser.add_argument('--validation_percentage', type=int, default=10, help='amount of data used for validation')
-    parser.add_argument('--training_percentage', type=int, default=80, help='amount of data used for training')
+    parser.add_argument('--use-gpu', action='store_true', help='use the GPU if it is available', default=False)
+    parser.add_argument('--data-path', default='./data', help='the path to the data file')
+    parser.add_argument('--data-file', default='data.h5', help='the name of the data file')
+    parser.add_argument('--sequence-length', type=int, default=16, help='how many elements in a sequence')
+    parser.add_argument('--validation-percentage', type=int, default=10, help='amount of data used for validation')
+    parser.add_argument('--training-percentage', type=int, default=80, help='amount of data used for training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-    parser.add_argument('--learning_rate_decay', type=float, default=0.8, metavar='LRD', help='the initial learning rate decay rate')
-    parser.add_argument('--start_learning_rate_decay', type=int, default=2, help='the epoch to start applying the LRD')
+    parser.add_argument('--learning-rate-decay', type=float, default=0.8, metavar='LRD', help='the initial learning rate decay rate')
+    parser.add_argument('--start-learning-rate-decay', type=int, default=2, help='the epoch to start applying the LRD')
 
     args = parser.parse_args()
 
     # Do this first so all the data is built before we go parallel and get race conditions
-    with Timer('Reading data'):
+    with Timer('Checking/Building data file'):
         build_data(args)
 
     if torch.cuda.is_available() and args.use_gpu:
-        # This uses the HOGWILD! approach to lock free SGD
+        # The DataParallel will distribute the model to all the avilable GPUs
         model = nn.DataParallel(GmrtCNN())
 
         # Train
@@ -112,11 +112,11 @@ def main():
         for p in processes:
             p.join()
 
-    with Timer('Reading data'):
-        test_loader = data.DataLoader(RfiDataset(args, 'test'), batch_size=args.batch_size)
+    with Timer('Final test'):
+        with Timer('Reading final test data'):
+            test_loader = data.DataLoader(RfiDataset(args, 'test'), batch_size=args.batch_size, num_workers=1)
 
-    print('Training all done')
-    test_epoch(model, test_loader)
+        test_epoch(model, test_loader)
 
 
 if __name__ == '__main__':

@@ -49,20 +49,22 @@ class RfiDataset(Dataset):
         self._h5_file = get_h5_file(args)
         self._group = self._h5_file[data_type]
         self._length = self._group.attrs['length_data']
-        self._x_data = self._group['data']
-        self._y_data = self._group['labels']
+        x_data = self._group['data']
+        y_data = self._group['labels']
         if rank is None:
+            self._x_data = np.copy(x_data)
+            self._y_data = np.copy(y_data)
             print('Pid: {}\tType: {}\tRank: {}\tLength: {}'.format(os.getpid(), data_type, rank, self._length))
         else:
             section_length = self._length / args.num_processes
             start = rank * section_length
             if rank == args.num_processes - 1:
-                self._x_data = self._x_data[start:]
-                self._y_data = self._y_data[start:]
+                self._x_data = x_data[start:]
+                self._y_data = y_data[start:]
             else:
-                self._x_data = self._x_data[start:start + section_length]
-                self._y_data = self._y_data[start:start + section_length]
-            self._length = len(self._y_data)
+                self._x_data = x_data[start:start + section_length]
+                self._y_data = y_data[start:start + section_length]
+            self._length = len(y_data)
             print('Pid: {}\tRank: {}\tLength: {}\tStart: {}'.format(os.getpid(), rank, self._length, start))
 
     def __len__(self):
@@ -115,7 +117,7 @@ def build_data(args):
     """ Read data """
     output_file = os.path.join(args.data_path, args.data_file)
     if os.path.exists(output_file):
-        with Timer('Reading HDF5 file'):
+        with Timer('Checking HDF5 file'):
             with h5py.File(output_file, 'r') as h5_file:
                 # Everything matches
                 if h5_file.attrs['sequence_length'] == args.sequence_length and \
@@ -190,7 +192,7 @@ def get_h5_file(args):
     """ Read data """
     output_file = os.path.join(args.data_path, args.data_file)
     if os.path.exists(output_file):
-        with Timer('Reading HDF5 file'):
+        with Timer('Checking HDF5 file'):
             h5_file = h5py.File(output_file, 'r')
             # Everything matches
             if h5_file.attrs['sequence_length'] == args.sequence_length and \
@@ -221,11 +223,11 @@ def one_hot(labels, number_class):
 class Timer(object):
     def __init__(self, name=None, verbose=True):
         self.verbose = verbose
-        self.name = '' if name is None else '[{0}]: '.format(name)
+        self.name = '' if name is None else name
         self.timer = default_timer
 
     def __enter__(self):
-        print('{0}Starting timer'.format(self.name))
+        print('Pid: {}\t{}\tStarting timer'.format(os.getpid(), self.name))
         self.start = self.timer()
         return self
 
@@ -234,4 +236,4 @@ class Timer(object):
         self.elapsed_secs = end - self.start
         self.elapsed = self.elapsed_secs
         if self.verbose:
-            print('{0}Elapsed time: {1}'.format(self.name, human_time(self.elapsed)))
+            print('Pid: {}\t{}\tElapsed time: {}'.format(os.getpid(), self.name, human_time(self.elapsed)))

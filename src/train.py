@@ -28,7 +28,7 @@ import torch.optim as optim
 import torch.utils.data as data
 from torch.autograd import Variable
 
-from utilities import RfiDataset
+from utilities import RfiDataset, Timer
 
 
 def train(args, model, rank=0):
@@ -71,13 +71,14 @@ def test_epoch(model, data_loader):
     model.eval()
     test_loss = 0
     correct = 0
-    for x_data, target in data_loader:
+    for batch_index, (x_data, target) in enumerate(data_loader):
         x_data = Variable(x_data, volatile=True)
         target = Variable(target)
         output = model(x_data)
         test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
         pred = output.data.max(1)[1]   # get the index of the max log-probability
         correct += pred.eq(target.data.max(1)[1]).cpu().sum()
+        print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
 
     test_loss /= len(data_loader.dataset)
     print('Pid: {}\tTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
