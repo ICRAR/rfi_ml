@@ -28,31 +28,30 @@ import torch.optim as optim
 import torch.utils.data as data
 from torch.autograd import Variable
 
-from utilities import RfiDataset, Timer
 
-
-def train(args, model, rank=0):
+def train(args, model, rfi_data, rank=0):
     # This is needed to "trick" numpy into using different seeds for different processes
     np.random.seed(args.seed + rank)
-    train_loader = data.DataLoader(RfiDataset(args, 'training', rank=rank), batch_size=args.batch_size, num_workers=1)
-    test_loader = data.DataLoader(RfiDataset(args, 'validation', rank=rank), batch_size=args.batch_size, num_workers=1)
+    train_loader = data.DataLoader(rfi_data.get_rfi_dataset('training', rank=rank), batch_size=args.batch_size, num_workers=1)
+    test_loader = data.DataLoader(rfi_data.get_rfi_dataset('validation', rank=rank), batch_size=args.batch_size, num_workers=1)
 
     optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum)
     for epoch in range(1, args.epochs + 1):
         # Adjust the learning rate
         adjust_learning_rate(optimizer, epoch, args.learning_rate_decay, args.start_learning_rate_decay, args.learning_rate)
         train_epoch(epoch, args, model, train_loader, optimizer)
-        test_epoch(model, test_loader)
+        test_epoch(args, model, test_loader)
 
 
 def train_epoch(epoch, args, model, data_loader, optimizer):
     model.train()
     pid = os.getpid()
-    for batch_idx, (x_data, target) in enumerate(data_loader):
+    for batch_idx, (x_data, periodogram_data, target) in enumerate(data_loader):
         x_data = Variable(x_data)
+        periodogram_data = Variable(periodogram_data)
         target = Variable(target)
         optimizer.zero_grad()
-        output = model(x_data)
+        output = model(x_data, periodogram_data)
         loss = functional.binary_cross_entropy(output, target)
         loss.backward()
         optimizer.step()
@@ -67,18 +66,20 @@ def train_epoch(epoch, args, model, data_loader, optimizer):
             )
 
 
-def test_epoch(model, data_loader):
+def test_epoch(args, model, data_loader):
     model.eval()
     test_loss = 0
     correct = 0
-    for batch_index, (x_data, target) in enumerate(data_loader):
+    for batch_index, (x_data, periodogram_data, target) in enumerate(data_loader):
         x_data = Variable(x_data, volatile=True)
+        periodogram_data = Variable(periodogram_data, volatile=True)
         target = Variable(target)
-        output = model(x_data)
+        output = model(x_data, periodogram_data)
         test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
         pred = output.data.max(1)[1]   # get the index of the max log-probability
         correct += pred.eq(target.data.max(1)[1]).cpu().sum()
-        print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
+        if batch_index % args.log_interval == 0 and batch_index > 1:
+            print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
 
     test_loss /= len(data_loader.dataset)
     print('Pid: {}\tTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(

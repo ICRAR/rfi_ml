@@ -34,6 +34,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from astropy.utils.console import human_time
+from scipy.signal import periodogram
 from torch.utils.data import Dataset
 
 NUMBER_CHANNELS = 1
@@ -44,39 +45,70 @@ class H5Exception(Exception):
     pass
 
 
-class RfiDataset(Dataset):
-    def __init__(self, args, data_type, rank=None):
-        self._h5_file = get_h5_file(args)
-        self._group = self._h5_file[data_type]
-        self._length = self._group.attrs['length_data']
-        x_data = self._group['data']
-        y_data = self._group['labels']
-        if rank is None:
-            self._x_data = np.copy(x_data)
-            self._y_data = np.copy(y_data)
-            print('Pid: {}\tType: {}\tRank: {}\tLength: {}'.format(os.getpid(), data_type, rank, self._length))
+class RfiData(object):
+    def __init__(self, args):
+        self._args = args
+        output_file = os.path.join(args.data_path, args.data_file)
+        with h5py.File(output_file, 'r') as h5_file:
+            data_group = h5_file['data']
+
+            # Move the data into memory
+            self._data_channel_0 = np.copy(data_group['data_channel_0'])
+            self._labels = np.copy(data_group['labels'])
+
+            length_data = len(self._labels) - args.sequence_length
+            split_point1 = int(length_data * args.training_percentage / 100.)
+            split_point2 = int(length_data * (args.training_percentage + args.validation_percentage) / 100.)
+            perm0 = np.arange(length_data)
+            np.random.shuffle(perm0)
+
+            self._train_sequence = perm0[:split_point1]
+            self._validation_sequence = perm0[split_point1:split_point2]
+            self._test_sequence = perm0[split_point2:]
+
+    def get_rfi_dataset(self, data_type, rank=None):
+        if data_type not in ['training', 'validation', 'test']:
+            raise ValueError("data_type must be one of: 'training', 'validation', 'test'")
+
+        if data_type == 'training':
+            sequence = self._train_sequence
+        elif data_type == 'validation':
+            sequence = self._validation_sequence
         else:
-            section_length = self._length / args.num_processes
+            sequence = self._test_sequence
+
+        if rank is not None:
+            section_length = len(sequence) / self._args.num_processes
             start = rank * section_length
-            if rank == args.num_processes - 1:
-                self._x_data = x_data[start:]
-                self._y_data = y_data[start:]
+            if rank == self._args.num_processes - 1:
+                sequence = sequence[start:]
             else:
-                self._x_data = x_data[start:start + section_length]
-                self._y_data = y_data[start:start + section_length]
-            self._length = len(y_data)
-            print('Pid: {}\tRank: {}\tLength: {}\tStart: {}'.format(os.getpid(), rank, self._length, start))
+                sequence = sequence[start:start + section_length]
+
+        return RfiDataset(sequence, self._data_channel_0, self._labels, self._args.sequence_length)
+
+
+class RfiDataset(Dataset):
+    def __init__(self, selection_order, x_data, y_data, sequence_length):
+        self._x_data = x_data
+        self._y_data = y_data
+        self._selection_order = selection_order
+        self._length = len(selection_order)
+        self._sequence_length = sequence_length
+        print('Pid: {}\tLength: {}'.format(os.getpid(), self._length))
 
     def __len__(self):
         return self._length
 
     def __getitem__(self, index):
-        return self._x_data[index], self._y_data[index]
+        selection_index = self._selection_order[index]
+        x_data = self._x_data[selection_index:selection_index + self._sequence_length]
+        periodogram_data = periodogram(x_data)
+        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index]
 
 
-def process_files(filename, rfi_label, sequence_length):
+def process_files(filename, rfi_label):
     """ Process a file and return the data and the labels """
-    number_channels = NUMBER_CHANNELS
     files_to_process = []
     for ending in ['.txt', '_loc.txt']:
         complete_filename = filename + ending
@@ -88,29 +120,22 @@ def process_files(filename, rfi_label, sequence_length):
         return
 
     # Load the files into numpy
-    print('Loading: {0}'.format(files_to_process[0]))
+    print('Pid: {}\tLoading: {}'.format(os.getpid(), files_to_process[0]))
     data_frame = pd.read_csv(files_to_process[0], header=None, delimiter=' ')
     data = data_frame.values.flatten()
-    print('Loading: {0}'.format(files_to_process[1]))
+
+    print('Pid: {}\tLoading: {}'.format(os.getpid(), files_to_process[1]))
     data_frame = pd.read_csv(files_to_process[1], header=None, delimiter=' ')
     labels = data_frame.values.flatten()
 
     # Check the lengths match
-    length_data = len(data)
-    assert length_data == len(labels), 'The line counts do not match for: {0}'.format(filename)
+    assert len(data) == len(labels), 'The line counts do not match for: {0}'.format(filename)
 
     # If substitute of the label is needed
     if rfi_label != 1:
         labels[labels == 1] = rfi_label
 
-    numpy_data = np.zeros((length_data, number_channels, sequence_length))
-    for i in reversed(range(sequence_length)):
-        start = sequence_length - i - 1
-        if start == 0:
-            numpy_data[:, 0, i] = data
-        else:
-            numpy_data[start:, 0, i] = data[:-start]
-    return numpy_data, labels
+    return data, labels
 
 
 def build_data(args):
@@ -120,19 +145,17 @@ def build_data(args):
         with Timer('Checking HDF5 file'):
             with h5py.File(output_file, 'r') as h5_file:
                 # Everything matches
-                if h5_file.attrs['sequence_length'] == args.sequence_length and \
-                                h5_file.attrs['validation_percentage'] == args.validation_percentage and \
-                                h5_file.attrs['training_percentage'] == args.training_percentage:
+                if h5_file.attrs['validation_percentage'] == args.validation_percentage and h5_file.attrs['training_percentage'] == args.training_percentage:
                     # All good nothing to do
                     return
 
     # Open the output files
     with Timer('Processing input files'):
-        data0, labels0 = process_files('../data/GMRT/impulsive_broadband_simulation_random_norfi', 0, args.sequence_length)
-        data1, labels1 = process_files('../data/GMRT/impulsive_broadband_simulation_random_5p', 1, args.sequence_length)
-        data2, labels2 = process_files('../data/GMRT/impulsive_broadband_simulation_random_10p', 1, args.sequence_length)
-        data3, labels3 = process_files('../data/GMRT/repetitive_rfi_timeseries', 1, args.sequence_length)
-        data4, labels4 = process_files('../data/GMRT/repetitive_rfi_random_timeseries', 1, args.sequence_length)
+        data0, labels0 = process_files('../data/GMRT/impulsive_broadband_simulation_random_norfi', 0)
+        data1, labels1 = process_files('../data/GMRT/impulsive_broadband_simulation_random_5p', 1)
+        data2, labels2 = process_files('../data/GMRT/impulsive_broadband_simulation_random_10p', 1)
+        data3, labels3 = process_files('../data/GMRT/repetitive_rfi_timeseries', 1)
+        data4, labels4 = process_files('../data/GMRT/repetitive_rfi_random_timeseries', 1)
 
     # Concatenate
     with Timer('Concatenating data'):
@@ -144,48 +167,19 @@ def build_data(args):
         labels = one_hot(labels, NUMBER_OF_CLASSES)
         data = standardize(data)
 
-    # Train/Validation/Test Split
-    with Timer('Train/Validation/Test Split'):
-        length_data = len(data)
-        perm0 = np.arange(length_data)
-        np.random.shuffle(perm0)
-        data = data[perm0]
-        labels = labels[perm0]
-        split_point1 = int(length_data * args.training_percentage / 100.)
-        split_point2 = int(length_data * (args.training_percentage + args.validation_percentage) / 100.)
-
-        x_train = data[:split_point1]
-        x_validation = data[split_point1:split_point2]
-        x_test = data[split_point2:]
-        y_train = labels[:split_point1]
-        y_validation = labels[split_point1:split_point2]
-        y_test = labels[split_point2:]
-
     with Timer('Saving to {0}'.format(output_file)):
         if not exists(args.data_path):
             makedirs(args.data_path)
         with h5py.File(output_file, 'w') as h5_file:
-            h5_file.attrs['sequence_length'] = args.sequence_length
             h5_file.attrs['number_channels'] = NUMBER_CHANNELS
             h5_file.attrs['number_classes'] = NUMBER_OF_CLASSES
             h5_file.attrs['validation_percentage'] = args.validation_percentage
             h5_file.attrs['training_percentage'] = args.training_percentage
-            h5_file.attrs['length_data'] = len(labels)
 
-            training_group = h5_file.create_group('training')
-            training_group.attrs['length_data'] = len(x_train)
-            training_group.create_dataset('data', data=x_train, compression='gzip')
-            training_group.create_dataset('labels', data=y_train, compression='gzip')
-
-            validation_group = h5_file.create_group('validation')
-            validation_group.attrs['length_data'] = len(x_validation)
-            validation_group.create_dataset('data', data=x_validation, compression='gzip')
-            validation_group.create_dataset('labels', data=y_validation, compression='gzip')
-
-            test_group = h5_file.create_group('test')
-            test_group.attrs['length_data'] = len(x_test)
-            test_group.create_dataset('data', data=x_test, compression='gzip')
-            test_group.create_dataset('labels', data=y_test, compression='gzip')
+            data_group = h5_file.create_group('data')
+            data_group.attrs['length_data'] = len(data)
+            data_group.create_dataset('data_channel_0', data=data, compression='gzip')
+            data_group.create_dataset('labels', data=labels, compression='gzip')
 
 
 def get_h5_file(args):
@@ -195,9 +189,7 @@ def get_h5_file(args):
         with Timer('Checking HDF5 file'):
             h5_file = h5py.File(output_file, 'r')
             # Everything matches
-            if h5_file.attrs['sequence_length'] == args.sequence_length and \
-                    h5_file.attrs['validation_percentage'] == args.validation_percentage and \
-                    h5_file.attrs['training_percentage'] == args.training_percentage:
+            if h5_file.attrs['validation_percentage'] == args.validation_percentage and h5_file.attrs['training_percentage'] == args.training_percentage:
                 return h5_file
 
     # The read data needs to be called first
@@ -217,7 +209,7 @@ def one_hot(labels, number_class):
     y = expansion[:, labels].T
     assert y.shape[1] == number_class, "Wrong number of labels!"
 
-    return y  # TODO: Look at using MultiLabelBinarizer
+    return y
 
 
 class Timer(object):

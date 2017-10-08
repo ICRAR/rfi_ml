@@ -33,8 +33,8 @@ import torch.nn as nn
 import torch.nn.functional as functional
 import torch.utils.data as data
 
-from train import RfiDataset, test_epoch, train
-from utilities import NUMBER_CHANNELS, NUMBER_OF_CLASSES, Timer, build_data
+from train import test_epoch, train
+from utilities import NUMBER_CHANNELS, NUMBER_OF_CLASSES, RfiData, Timer, build_data
 
 
 class GmrtCNN(nn.Module):
@@ -50,28 +50,44 @@ class GmrtCNN(nn.Module):
         self.conv3 = nn.Conv1d(36, 72, kernel_size=2, stride=1)
         self.conv3.double()     # Force the Conv1d to use a double
         self.max_pool3 = nn.MaxPool1d(2, stride=2)
-        self.fc1 = nn.Linear(72, 36)
-        self.fc1.double()       # Force the Conv1d to use a double
-        self.fc2 = nn.Linear(36, NUMBER_OF_CLASSES)
-        self.fc2.double()       # Force the Conv1d to use a double
+        self.fc1a = nn.Linear(144, 36)
+        self.fc1a.double()       # Force the layer to a double
 
-    def forward(self, input_data):
-        input_data = input_data
-        x = self.max_pool1(functional.relu(self.conv1(input_data)))
+        self.fc1b = nn.Linear(216, 36)
+        self.fc1b.double()       # Force the layer to a double
+
+        self.fc2 = nn.Linear(72, 36)
+        self.fc2.double()       # Force the layer to use a double
+        self.fc3 = nn.Linear(36, NUMBER_OF_CLASSES)
+        self.fc3.double()       # Force the layer to use a double
+
+    def forward(self, input_data_raw, input_periodogram):
+        x = self.max_pool1(functional.relu(self.conv1(input_data_raw)))
         x = self.max_pool2(functional.relu(self.conv2(x)))
         x = self.max_pool3(functional.relu(self.conv3(x)))
         x = x.view(x.size(0), -1)
         x = functional.dropout(x, p=self.keep_probability, training=self.training)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = functional.sigmoid(x)
-        return x
+        x = self.fc1a(x)
+
+        y = self.max_pool1(functional.relu(self.conv1(input_periodogram)))
+        y = self.max_pool2(functional.relu(self.conv2(y)))
+        y = self.max_pool3(functional.relu(self.conv3(y)))
+        y = y.view(y.size(0), -1)
+        y = functional.dropout(y, p=self.keep_probability, training=self.training)
+        y = self.fc1b(y)
+
+        z = torch.cat((x, y), dim=1)
+        z = self.fc2(z)
+        z = self.fc3(z)
+
+        z = functional.sigmoid(z)
+        return z
 
 
 def main():
     parser = argparse.ArgumentParser(description='GMRT CNN Training')
     parser.add_argument('--batch-size', type=int, default=10000, metavar='N', help='input batch size for training (default: 10000)')
-    parser.add_argument('--epochs', type=int, default=2, metavar='N', help='number of epochs to train (default: 5)')       # TODO:
+    parser.add_argument('--epochs', type=int, default=5, metavar='N', help='number of epochs to train (default: 5)')       # TODO:
     parser.add_argument('--learning-rate', type=float, default=0.01, metavar='LR', help='learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
@@ -79,7 +95,7 @@ def main():
     parser.add_argument('--use-gpu', action='store_true', help='use the GPU if it is available', default=False)
     parser.add_argument('--data-path', default='./data', help='the path to the data file')
     parser.add_argument('--data-file', default='data.h5', help='the name of the data file')
-    parser.add_argument('--sequence-length', type=int, default=16, help='how many elements in a sequence')
+    parser.add_argument('--sequence-length', type=int, default=30, help='how many elements in a sequence')
     parser.add_argument('--validation-percentage', type=int, default=10, help='amount of data used for validation')
     parser.add_argument('--training-percentage', type=int, default=80, help='amount of data used for training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
@@ -92,12 +108,14 @@ def main():
     with Timer('Checking/Building data file'):
         build_data(args)
 
+    rfi_data = RfiData(args)
+
     if torch.cuda.is_available() and args.use_gpu:
         # The DataParallel will distribute the model to all the avilable GPUs
         model = nn.DataParallel(GmrtCNN())
 
         # Train
-        train(args, model)
+        train(args, model, rfi_data)
 
     else:
         # This uses the HOGWILD! approach to lock free SGD
@@ -106,7 +124,7 @@ def main():
 
         processes = []
         for rank in range(args.num_processes):
-            p = mp.Process(target=train, args=(args, model, rank))
+            p = mp.Process(target=train, args=(args, model, rfi_data, rank))
             p.start()
             processes.append(p)
         for p in processes:
@@ -114,9 +132,9 @@ def main():
 
     with Timer('Final test'):
         with Timer('Reading final test data'):
-            test_loader = data.DataLoader(RfiDataset(args, 'test'), batch_size=args.batch_size, num_workers=1)
+            test_loader = data.DataLoader(rfi_data.get_rfi_dataset('test'), batch_size=args.batch_size, num_workers=1)
 
-        test_epoch(model, test_loader)
+        test_epoch(args, model, test_loader)
 
 
 if __name__ == '__main__':
