@@ -103,8 +103,8 @@ class RfiDataset(Dataset):
     def __getitem__(self, index):
         selection_index = self._selection_order[index]
         x_data = self._x_data[selection_index:selection_index + self._sequence_length]
-        periodogram_data = periodogram(x_data)
-        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index]
+        _, periodogram_data = periodogram(x_data)
+        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index + self._sequence_length]
 
 
 def process_files(filename, rfi_label):

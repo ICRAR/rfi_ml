@@ -53,7 +53,7 @@ class GmrtCNN(nn.Module):
         self.fc1a = nn.Linear(144, 36)
         self.fc1a.double()       # Force the layer to a double
 
-        self.fc1b = nn.Linear(216, 36)
+        self.fc1b = nn.Linear(72, 36)
         self.fc1b.double()       # Force the layer to a double
 
         self.fc2 = nn.Linear(72, 36)
