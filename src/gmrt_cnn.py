@@ -27,6 +27,7 @@ from __future__ import print_function
 
 import argparse
 
+import numpy as np
 import torch
 import torch.multiprocessing as mp
 import torch.nn as nn
@@ -98,11 +99,17 @@ def main():
     parser.add_argument('--sequence-length', type=int, default=30, help='how many elements in a sequence')
     parser.add_argument('--validation-percentage', type=int, default=10, help='amount of data used for validation')
     parser.add_argument('--training-percentage', type=int, default=80, help='amount of data used for training')
-    parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+    parser.add_argument('--seed', type=int, default=None, metavar='S', help='random seed (default: 1)')
     parser.add_argument('--learning-rate-decay', type=float, default=0.8, metavar='LRD', help='the initial learning rate decay rate')
     parser.add_argument('--start-learning-rate-decay', type=int, default=2, help='the epoch to start applying the LRD')
 
     args = parser.parse_args()
+
+    # If the have specified a seed get a random
+    if args.seed is not None:
+        np.random.seed(args.seed)
+    else:
+        np.random.seed()
 
     # Do this first so all the data is built before we go parallel and get race conditions
     with Timer('Checking/Building data file'):

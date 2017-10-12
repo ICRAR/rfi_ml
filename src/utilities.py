@@ -81,8 +81,10 @@ class RfiData(object):
             section_length = len(sequence) / self._args.num_processes
             start = rank * section_length
             if rank == self._args.num_processes - 1:
+                # sequence = sequence[start:start + 1000]
                 sequence = sequence[start:]
             else:
+                # sequence = sequence[start:start + 1000]
                 sequence = sequence[start:start + section_length]
 
         return RfiDataset(sequence, self._data_channel_0, self._labels, self._args.sequence_length)
@@ -104,7 +106,7 @@ class RfiDataset(Dataset):
         selection_index = self._selection_order[index]
         x_data = self._x_data[selection_index:selection_index + self._sequence_length]
         _, periodogram_data = periodogram(x_data)
-        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index + self._sequence_length]
+        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index]
 
 
 def process_files(filename, rfi_label):
@@ -142,12 +144,8 @@ def build_data(args):
     """ Read data """
     output_file = os.path.join(args.data_path, args.data_file)
     if os.path.exists(output_file):
-        with Timer('Checking HDF5 file'):
-            with h5py.File(output_file, 'r') as h5_file:
-                # Everything matches
-                if h5_file.attrs['validation_percentage'] == args.validation_percentage and h5_file.attrs['training_percentage'] == args.training_percentage:
-                    # All good nothing to do
-                    return
+        # All good nothing to do
+        return
 
     # Open the output files
     with Timer('Processing input files'):
@@ -173,8 +171,6 @@ def build_data(args):
         with h5py.File(output_file, 'w') as h5_file:
             h5_file.attrs['number_channels'] = NUMBER_CHANNELS
             h5_file.attrs['number_classes'] = NUMBER_OF_CLASSES
-            h5_file.attrs['validation_percentage'] = args.validation_percentage
-            h5_file.attrs['training_percentage'] = args.training_percentage
 
             data_group = h5_file.create_group('data')
             data_group.attrs['length_data'] = len(data)
