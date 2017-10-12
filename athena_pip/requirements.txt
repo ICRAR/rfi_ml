@@ -1,0 +1,5 @@
+astropy
+h5py
+numpy
+pandas
+scipy
