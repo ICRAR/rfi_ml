@@ -5,12 +5,12 @@
 # usmall is 32 items on the queue usmall2 is 8
 #PBS -j oe
 
-cd /home/kevin/rfi_ml
+cd /home/kevin/rfi_ml/src
 
 source ~/anaconda2/bin/activate rfi_ml
 
 date
 
-python gmrt.py --num-processes 12
+python gmrt_cnn.py --num-processes 12
 
 date
