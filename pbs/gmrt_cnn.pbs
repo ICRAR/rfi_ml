@@ -11,6 +11,6 @@ source ~/anaconda2/bin/activate rfi_ml
 
 date
 
-python gmrt_cnn.py --num-processes 12
+python gmrt_cnn.py --num-processes 12 > gmrt_cnn.pbs.log
 
 date
