@@ -103,7 +103,7 @@ def test_epoch(args, model, data_loader):
         len(data_loader.dataset),
         100. * correct / len(data_loader.dataset))
     )
-    histogram = Histogram(histogram_data, bins=20, number_range=(0.0, 1.0), histogram_type='numbers')
+    histogram = Histogram(histogram_data, bins=10, number_range=(0.0, 1.0), histogram_type='numbers')
     print(histogram.horizontal())
 
 
