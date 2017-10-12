@@ -104,6 +104,7 @@ def main():
     parser.add_argument('--start-learning-rate-decay', type=int, default=2, help='the epoch to start applying the LRD')
 
     args = parser.parse_args()
+    print(args)
 
     # If the have specified a seed get a random
     if args.seed is not None:
@@ -117,7 +118,7 @@ def main():
 
     rfi_data = RfiData(args)
 
-    if torch.cuda.is_available() and args.use_gpu:
+    if args.use_gpu and torch.cuda.is_available():
         # The DataParallel will distribute the model to all the avilable GPUs
         model = nn.DataParallel(GmrtCNN())
 
