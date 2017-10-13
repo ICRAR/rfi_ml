@@ -121,7 +121,7 @@ def main():
 
     if args.use_gpu and torch.cuda.is_available():
         # The DataParallel will distribute the model to all the avilable GPUs
-        model = nn.DataParallel(GmrtCNN())
+        model = nn.DataParallel(GmrtCNN()).cuda()
 
         # Train
         train(args, model, rfi_data)
