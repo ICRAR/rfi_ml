@@ -32,33 +32,33 @@ from torch.autograd import Variable
 from histogram import Histogram
 
 
-def train(args, model, rfi_data, rank=0):
+def train(model, rfi_data, rank=0, **kwargs):
     # This is needed to "trick" numpy into using different seeds for different processes
-    if args.seed is not None:
-        np.random.seed(args.seed + rank)
+    if kwargs['seed'] is not None:
+        np.random.seed(kwargs['seed'] + rank)
     else:
         np.random.seed()
 
     train_loader = data.DataLoader(
-        rfi_data.get_rfi_dataset('training', rank=rank, short_run_size=args.short_run),
-        batch_size=args.batch_size,
+        rfi_data.get_rfi_dataset('training', rank=rank, short_run_size=kwargs['short_run']),
+        batch_size=kwargs['batch_size'],
         num_workers=1
     )
     test_loader = data.DataLoader(
-        rfi_data.get_rfi_dataset('validation', rank=rank, short_run_size=args.short_run),
-        batch_size=args.batch_size,
+        rfi_data.get_rfi_dataset('validation', rank=rank, short_run_size=kwargs['short_run']),
+        batch_size=kwargs['batch_size'],
         num_workers=1
     )
 
-    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum)
-    for epoch in range(1, args.epochs + 1):
+    optimizer = optim.SGD(model.parameters(), lr=kwargs['learning_rate'], momentum=kwargs['momentum'])
+    for epoch in range(1, kwargs['epochs'] + 1):
         # Adjust the learning rate
-        adjust_learning_rate(optimizer, epoch, args.learning_rate_decay, args.start_learning_rate_decay, args.learning_rate)
-        train_epoch(epoch, args, model, train_loader, optimizer)
-        test_epoch(args, model, test_loader)
+        adjust_learning_rate(optimizer, epoch, kwargs['learning_rate_decay'], kwargs['start_learning_rate_decay'], kwargs['learning_rate'])
+        train_epoch(epoch, model, train_loader, optimizer, kwargs['log_interval'])
+        test_epoch(model, test_loader, kwargs['log_interval'])
 
 
-def train_epoch(epoch, args, model, data_loader, optimizer):
+def train_epoch(epoch, model, data_loader, optimizer, log_interval):
     model.train()
     pid = os.getpid()
     for batch_idx, (x_data, periodogram_data, target) in enumerate(data_loader):
@@ -72,7 +72,7 @@ def train_epoch(epoch, args, model, data_loader, optimizer):
         loss = functional.binary_cross_entropy(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0 and batch_idx > 1:
+        if batch_idx % log_interval == 0 and batch_idx > 1:
             print('Pid: {}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 pid,
                 epoch,
@@ -88,7 +88,7 @@ def build_histogram(output, target_column, histogram_data):
         histogram_data.append(values[column])
 
 
-def test_epoch(args, model, data_loader):
+def test_epoch(model, data_loader, log_interval):
     model.eval()
     test_loss = 0
     correct = 0
@@ -106,7 +106,7 @@ def test_epoch(args, model, data_loader):
         correct += pred.eq(target_column).sum()
         build_histogram(output, target_column, histogram_data_correct_prediction)
 
-        if batch_index % args.log_interval == 0 and batch_index > 1:
+        if batch_index % log_interval == 0 and batch_index > 1:
             print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
 
     test_loss /= len(data_loader.dataset)

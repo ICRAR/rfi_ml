@@ -11,6 +11,7 @@ source ~/anaconda2/bin/activate rfi_ml
 
 date
 
-python gmrt_cnn.py --num-processes 12 > gmrt_cnn.pbs.log
+python train_gmrt_cnn.py --num-processes 12 --save gmrt_cnn.model.saved
+# python -m cProfile -o train_gmrt_cnn.prof train_gmrt_cnn.py --num-processes 12 --save gmrt_cnn.model.saved
 
 date

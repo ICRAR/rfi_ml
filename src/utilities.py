@@ -46,9 +46,11 @@ class H5Exception(Exception):
 
 
 class RfiData(object):
-    def __init__(self, args):
-        self._args = args
-        output_file = os.path.join(args.data_path, args.data_file)
+    def __init__(self, **kwargs):
+        self._sequence_length = kwargs['sequence_length']
+        self._num_processes = kwargs['num_processes']
+        self._using_gpu = kwargs['using_gpu']
+        output_file = os.path.join(kwargs['data_path'], kwargs['data_file'])
         with h5py.File(output_file, 'r') as h5_file:
             data_group = h5_file['data']
 
@@ -56,9 +58,9 @@ class RfiData(object):
             self._data_channel_0 = np.copy(data_group['data_channel_0'])
             self._labels = np.copy(data_group['labels'])
 
-            length_data = len(self._labels) - args.sequence_length
-            split_point1 = int(length_data * args.training_percentage / 100.)
-            split_point2 = int(length_data * (args.training_percentage + args.validation_percentage) / 100.)
+            length_data = len(self._labels) - kwargs['sequence_length']
+            split_point1 = int(length_data * kwargs['training_percentage'] / 100.)
+            split_point2 = int(length_data * (kwargs['training_percentage'] + kwargs['validation_percentage']) / 100.)
             perm0 = np.arange(length_data)
             np.random.shuffle(perm0)
 
@@ -77,10 +79,13 @@ class RfiData(object):
         else:
             sequence = self._test_sequence
 
-        if rank is not None:
-            section_length = len(sequence) / self._args.num_processes
+        if self._using_gpu or rank is None:
+            if short_run_size is not None:
+                sequence = sequence[0:short_run_size]
+        else:
+            section_length = len(sequence) / self._num_processes
             start = rank * section_length
-            if rank == self._args.num_processes - 1:
+            if rank == self._num_processes - 1:
                 if short_run_size is not None:
                     sequence = sequence[start:start + short_run_size]
                 else:
@@ -91,7 +96,7 @@ class RfiData(object):
                 else:
                     sequence = sequence[start:start + section_length]
 
-        return RfiDataset(sequence, self._data_channel_0, self._labels, self._args.sequence_length)
+        return RfiDataset(sequence, self._data_channel_0, self._labels, self._sequence_length)
 
 
 class RfiDataset(Dataset):
@@ -144,9 +149,9 @@ def process_files(filename, rfi_label):
     return data, labels
 
 
-def build_data(args):
+def build_data(**kwargs):
     """ Read data """
-    output_file = os.path.join(args.data_path, args.data_file)
+    output_file = os.path.join(kwargs['data_path'], kwargs['data_file'])
     if os.path.exists(output_file):
         # All good nothing to do
         return
@@ -170,8 +175,8 @@ def build_data(args):
         data = standardize(data)
 
     with Timer('Saving to {0}'.format(output_file)):
-        if not exists(args.data_path):
-            makedirs(args.data_path)
+        if not exists(kwargs['data_path']):
+            makedirs(kwargs['data_path'])
         with h5py.File(output_file, 'w') as h5_file:
             h5_file.attrs['number_channels'] = NUMBER_CHANNELS
             h5_file.attrs['number_classes'] = NUMBER_OF_CLASSES

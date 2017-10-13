@@ -103,28 +103,38 @@ def main():
     parser.add_argument('--learning-rate-decay', type=float, default=0.8, metavar='LRD', help='the initial learning rate decay rate')
     parser.add_argument('--start-learning-rate-decay', type=int, default=2, help='the epoch to start applying the LRD')
     parser.add_argument('--short_run', type=int, default=None, help='use a short run of the test data')
+    parser.add_argument('--save', type=str,  default=None, help='path to save the final model')
 
-    args = parser.parse_args()
-    print(args)
+    kwargs = vars(parser.parse_args())
+    print(kwargs)
 
     # If the have specified a seed get a random
-    if args.seed is not None:
-        np.random.seed(args.seed)
+    if kwargs['seed'] is not None:
+        np.random.seed(kwargs['seed'])
     else:
         np.random.seed()
 
+    if kwargs['use_gpu'] and torch.cuda.is_available():
+        print('Using cuda devices: {}'.format(torch.cuda.device_count()))
+        kwargs['cuda_device_count'] = torch.cuda.device_count()
+        kwargs['using_gpu'] = True
+    else:
+        print('Using CPU')
+        kwargs['cuda_device_count'] = 0
+        kwargs['using_gpu'] = False
+
     # Do this first so all the data is built before we go parallel and get race conditions
     with Timer('Checking/Building data file'):
-        build_data(args)
+        build_data(**kwargs)
 
-    rfi_data = RfiData(args)
+    rfi_data = RfiData(**kwargs)
 
-    if args.use_gpu and torch.cuda.is_available():
-        # The DataParallel will distribute the model to all the avilable GPUs
+    if kwargs['using_gpu']:
+        # The DataParallel will distribute the model to all the available GPUs
         model = nn.DataParallel(GmrtCNN()).cuda()
 
         # Train
-        train(args, model, rfi_data)
+        train(model, rfi_data, **kwargs)
 
     else:
         # This uses the HOGWILD! approach to lock free SGD
@@ -132,8 +142,8 @@ def main():
         model.share_memory()  # gradients are allocated lazily, so they are not shared here
 
         processes = []
-        for rank in range(args.num_processes):
-            p = mp.Process(target=train, args=(args, model, rfi_data, rank))
+        for rank in range(kwargs['num_processes']):
+            p = mp.Process(target=train, args=(model, rfi_data, rank), kwargs=kwargs)
             p.start()
             processes.append(p)
         for p in processes:
@@ -142,12 +152,17 @@ def main():
     with Timer('Final test'):
         with Timer('Reading final test data'):
             test_loader = data.DataLoader(
-                rfi_data.get_rfi_dataset('test', short_run_size=args.short_run),
-                batch_size=args.batch_size,
+                rfi_data.get_rfi_dataset('test', short_run_size=kwargs['short_run']),
+                batch_size=kwargs['batch_size'],
                 num_workers=1
             )
 
-        test_epoch(args, model, test_loader)
+        test_epoch(model, test_loader, kwargs['log_interval'])
+
+    if kwargs['save'] is not None:
+        with Timer('Saving model'):
+            with open(kwargs['save'], 'wb') as save_file:
+                torch.save(model, save_file)
 
 
 if __name__ == '__main__':
