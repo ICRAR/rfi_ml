@@ -149,14 +149,14 @@ def main():
         for p in processes:
             p.join()
 
+    with Timer('Reading final test data'):
+        test_loader = data.DataLoader(
+            rfi_data.get_rfi_dataset('test', short_run_size=kwargs['short_run']),
+            batch_size=kwargs['batch_size'],
+            num_workers=1,
+            pin_memory=kwargs['using_gpu'],
+        )
     with Timer('Final test'):
-        with Timer('Reading final test data'):
-            test_loader = data.DataLoader(
-                rfi_data.get_rfi_dataset('test', short_run_size=kwargs['short_run']),
-                batch_size=kwargs['batch_size'],
-                num_workers=1
-            )
-
         test_epoch(model, test_loader, kwargs['log_interval'])
 
     if kwargs['save'] is not None:

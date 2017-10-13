@@ -42,12 +42,14 @@ def train(model, rfi_data, rank=0, **kwargs):
     train_loader = data.DataLoader(
         rfi_data.get_rfi_dataset('training', rank=rank, short_run_size=kwargs['short_run']),
         batch_size=kwargs['batch_size'],
-        num_workers=1
+        num_workers=1,
+        pin_memory=kwargs['using_gpu'],
     )
     test_loader = data.DataLoader(
         rfi_data.get_rfi_dataset('validation', rank=rank, short_run_size=kwargs['short_run']),
         batch_size=kwargs['batch_size'],
-        num_workers=1
+        num_workers=1,
+        pin_memory=kwargs['using_gpu'],
     )
 
     optimizer = optim.SGD(model.parameters(), lr=kwargs['learning_rate'], momentum=kwargs['momentum'])
