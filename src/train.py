@@ -23,6 +23,7 @@
 import os
 
 import numpy as np
+import torch
 import torch.nn.functional as functional
 import torch.optim as optim
 import torch.utils.data as data
@@ -58,6 +59,8 @@ def train_epoch(epoch, args, model, data_loader, optimizer):
         target = Variable(target)
         optimizer.zero_grad()
         output = model(x_data, periodogram_data)
+        if type(output.data) == torch.cuda.DoubleTensor:
+            output = output.cpu()
         loss = functional.binary_cross_entropy(output, target)
         loss.backward()
         optimizer.step()
@@ -87,6 +90,8 @@ def test_epoch(args, model, data_loader):
         periodogram_data = Variable(periodogram_data, volatile=True)
         target = Variable(target)
         output = model(x_data, periodogram_data)
+        if type(output.data) == torch.cuda.DoubleTensor:
+            output = output.cpu()
         test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
         pred = output.data.max(1)[1]   # get the index of the max log-probability
         target_column = target.data.max(1)[1]
