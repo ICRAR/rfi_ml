@@ -39,8 +39,16 @@ def train(args, model, rfi_data, rank=0):
     else:
         np.random.seed()
 
-    train_loader = data.DataLoader(rfi_data.get_rfi_dataset('training', rank=rank), batch_size=args.batch_size, num_workers=1)
-    test_loader = data.DataLoader(rfi_data.get_rfi_dataset('validation', rank=rank), batch_size=args.batch_size, num_workers=1)
+    train_loader = data.DataLoader(
+        rfi_data.get_rfi_dataset('training', rank=rank, short_run_size=args.short_run),
+        batch_size=args.batch_size,
+        num_workers=1
+    )
+    test_loader = data.DataLoader(
+        rfi_data.get_rfi_dataset('validation', rank=rank, short_run_size=args.short_run),
+        batch_size=args.batch_size,
+        num_workers=1
+    )
 
     optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum)
     for epoch in range(1, args.epochs + 1):
@@ -84,7 +92,7 @@ def test_epoch(args, model, data_loader):
     model.eval()
     test_loss = 0
     correct = 0
-    histogram_data = []
+    histogram_data_correct_prediction = []
     for batch_index, (x_data, periodogram_data, target) in enumerate(data_loader):
         x_data = Variable(x_data, volatile=True)
         periodogram_data = Variable(periodogram_data, volatile=True)
@@ -93,10 +101,11 @@ def test_epoch(args, model, data_loader):
         if type(output.data) == torch.cuda.DoubleTensor:
             output = output.cpu()
         test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
-        pred = output.data.max(1)[1]   # get the index of the max log-probability
+        pred = output.data.max(1)[1]
         target_column = target.data.max(1)[1]
-        correct += pred.eq(target_column).cpu().sum()
-        build_histogram(output, target_column, histogram_data)
+        correct += pred.eq(target_column).sum()
+        build_histogram(output, target_column, histogram_data_correct_prediction)
+
         if batch_index % args.log_interval == 0 and batch_index > 1:
             print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
 
@@ -108,7 +117,13 @@ def test_epoch(args, model, data_loader):
         len(data_loader.dataset),
         100. * correct / len(data_loader.dataset))
     )
-    histogram = Histogram(histogram_data, bins=10, number_range=(0.0, 1.0), histogram_type='numbers')
+    histogram = Histogram(
+        histogram_data_correct_prediction,
+        title='Percentage of Correctly Predicted',
+        bins=10,
+        number_range=(0.0, 1.0),
+        histogram_type='numbers'
+    )
     print(histogram.horizontal())
 
 

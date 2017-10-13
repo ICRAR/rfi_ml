@@ -31,6 +31,9 @@ class Histogram(object):
         self.title = title
         self.type = histogram_type
         self.histogram = np.histogram(np.array(data), bins=self.bins, range=number_range)
+        if histogram_type == 'numbers':
+            total = len(data)
+            self.percentages = [bin_value * 100.0 / total for bin_value in self.histogram[0]]
 
     def horizontal(self, height=4, character='|'):
         if self.title is not None:
@@ -54,6 +57,9 @@ class Histogram(object):
                 his += line
             his += '{0:.2f}'.format(self.histogram[1][0]) + ' ' * self.bins + '{0:.2f}'.format(self.histogram[1][-1]) + '\n'
         else:
+            his += ' ' * 4
+            his += ''.join(['| {0:^8.2f}%'.format(n) for n in self.percentages])
+            his += '|\n'
             his += ' ' * 4
             his += ''.join(['| {0:^8} '.format(n) for n in self.histogram[0]])
             his += '|\n'
@@ -80,8 +86,8 @@ class Histogram(object):
                 line = xl[i] + ' '*(max(lxl)-lxl[i])+': ' + character*c+'\n'
                 his += line
         else:
-            for item1, item2 in zip(self.histogram[0], self.histogram[1]):
-                line = '{0:>6.2f} | {1:>5}\n'.format(item2, item1)
+            for item1, item2, item3 in zip(self.histogram[0], self.histogram[1], self.percentages):
+                line = '{0:>6.2f} | {1:>5} | {2:>6.2f}%\n'.format(item2, item1, item3)
                 his += line
         return his
 

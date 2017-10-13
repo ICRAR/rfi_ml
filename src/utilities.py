@@ -66,7 +66,7 @@ class RfiData(object):
             self._validation_sequence = perm0[split_point1:split_point2]
             self._test_sequence = perm0[split_point2:]
 
-    def get_rfi_dataset(self, data_type, rank=None):
+    def get_rfi_dataset(self, data_type, rank=None, short_run_size=None):
         if data_type not in ['training', 'validation', 'test']:
             raise ValueError("data_type must be one of: 'training', 'validation', 'test'")
 
@@ -81,11 +81,15 @@ class RfiData(object):
             section_length = len(sequence) / self._args.num_processes
             start = rank * section_length
             if rank == self._args.num_processes - 1:
-                # sequence = sequence[start:start + 1000]
-                sequence = sequence[start:]
+                if short_run_size is not None:
+                    sequence = sequence[start:start + short_run_size]
+                else:
+                    sequence = sequence[start:]
             else:
-                # sequence = sequence[start:start + 1000]
-                sequence = sequence[start:start + section_length]
+                if short_run_size is not None:
+                    sequence = sequence[start:start + short_run_size]
+                else:
+                    sequence = sequence[start:start + section_length]
 
         return RfiDataset(sequence, self._data_channel_0, self._labels, self._args.sequence_length)
 

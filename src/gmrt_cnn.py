@@ -93,7 +93,7 @@ def main():
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--num-processes', type=int, default=4, metavar='N', help='how many training processes to use (default: 4)')
-    parser.add_argument('--use-gpu', action='store_true', help='use the GPU if it is available', default=False)
+    parser.add_argument('--use-gpu', action='store_true', default=False, help='use the GPU if it is available')
     parser.add_argument('--data-path', default='./data', help='the path to the data file')
     parser.add_argument('--data-file', default='data.h5', help='the name of the data file')
     parser.add_argument('--sequence-length', type=int, default=30, help='how many elements in a sequence')
@@ -102,6 +102,7 @@ def main():
     parser.add_argument('--seed', type=int, default=None, metavar='S', help='random seed (default: 1)')
     parser.add_argument('--learning-rate-decay', type=float, default=0.8, metavar='LRD', help='the initial learning rate decay rate')
     parser.add_argument('--start-learning-rate-decay', type=int, default=2, help='the epoch to start applying the LRD')
+    parser.add_argument('--short_run', type=int, default=None, help='use a short run of the test data')
 
     args = parser.parse_args()
     print(args)
@@ -140,7 +141,11 @@ def main():
 
     with Timer('Final test'):
         with Timer('Reading final test data'):
-            test_loader = data.DataLoader(rfi_data.get_rfi_dataset('test'), batch_size=args.batch_size, num_workers=1)
+            test_loader = data.DataLoader(
+                rfi_data.get_rfi_dataset('test', short_run_size=args.short_run),
+                batch_size=args.batch_size,
+                num_workers=1
+            )
 
         test_epoch(args, model, test_loader)
 

@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=gpuq
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --mail-type=ALL
 #SBATCH --mail-type=TIME_LIMIT_90
 #SBATCH --mail-user kevin.vinsen@icrar.org
