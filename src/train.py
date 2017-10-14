@@ -20,7 +20,6 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
-import os
 
 import numpy as np
 import torch
@@ -30,7 +29,7 @@ import torch.utils.data as data
 from torch.autograd import Variable
 
 from histogram import Histogram
-from utilities import NUMBER_OF_CLASSES
+from utilities import NUMBER_OF_CLASSES, my_print
 
 
 def train(model, rfi_data, rank=0, **kwargs):
@@ -63,7 +62,6 @@ def train(model, rfi_data, rank=0, **kwargs):
 
 def train_epoch(epoch, model, data_loader, optimizer, log_interval):
     model.train()
-    pid = os.getpid()
     for batch_idx, (x_data, periodogram_data, target) in enumerate(data_loader):
         x_data = Variable(x_data)
         periodogram_data = Variable(periodogram_data)
@@ -76,8 +74,7 @@ def train_epoch(epoch, model, data_loader, optimizer, log_interval):
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0 and batch_idx > 1:
-            print('Pid: {}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                pid,
+            my_print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch,
                 batch_idx * len(x_data),
                 len(data_loader.dataset),
@@ -112,11 +109,10 @@ def test_epoch(model, data_loader, log_interval):
         build_histogram(output, target_column, histogram_data)
 
         if batch_index % log_interval == 0 and batch_index > 1:
-            print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
+            my_print('Test iteration: {}\tCorrect count: {}'.format(batch_index, correct))
 
     test_loss /= len(data_loader.dataset)
-    print('Pid: {}\tTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        os.getpid(),
+    my_print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss,
         correct,
         len(data_loader.dataset),
@@ -125,7 +121,7 @@ def test_epoch(model, data_loader, log_interval):
     for key, value in histogram_data.items():
         histogram = Histogram(
             value,
-            title='Pid:{}\tPercentage of Correctly Predicted: {}'.format(os.getpid(), key),
+            title='Percentage of Correctly Predicted: {}'.format(key),
             bins=10,
             number_range=(0.0, 1.0),
             histogram_type='numbers'
@@ -137,6 +133,6 @@ def adjust_learning_rate(optimizer, epoch, learning_rate_decay, start_learning_r
     """ Sets the learning rate to the initial LR decayed  """
     lr_decay = learning_rate_decay ** max(epoch + 1 - start_learning_rate_decay, 0.0)
     new_learning_rate = learning_rate * lr_decay
-    print('Pid: {}\tNew learning rate: {}'.format(os.getpid(), new_learning_rate))
+    my_print('New learning rate: {}'.format(new_learning_rate))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = new_learning_rate

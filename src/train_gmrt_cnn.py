@@ -35,7 +35,7 @@ import torch.nn.functional as functional
 import torch.utils.data as data
 
 from train import test_epoch, train
-from utilities import NUMBER_CHANNELS, NUMBER_OF_CLASSES, RfiData, Timer, build_data
+from utilities import NUMBER_CHANNELS, NUMBER_OF_CLASSES, RfiData, Timer, build_data, my_print
 
 
 class GmrtCNN(nn.Module):
@@ -106,7 +106,7 @@ def main():
     parser.add_argument('--save', type=str,  default=None, help='path to save the final model')
 
     kwargs = vars(parser.parse_args())
-    print(kwargs)
+    my_print(kwargs)
 
     # If the have specified a seed get a random
     if kwargs['seed'] is not None:
@@ -115,11 +115,11 @@ def main():
         np.random.seed()
 
     if kwargs['use_gpu'] and torch.cuda.is_available():
-        print('Using cuda devices: {}'.format(torch.cuda.device_count()))
+        my_print('Using cuda devices: {}'.format(torch.cuda.device_count()))
         kwargs['cuda_device_count'] = torch.cuda.device_count()
         kwargs['using_gpu'] = True
     else:
-        print('Using CPU')
+        my_print('Using CPU')
         kwargs['cuda_device_count'] = 0
         kwargs['using_gpu'] = False
 

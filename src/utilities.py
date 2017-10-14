@@ -25,6 +25,7 @@
 """
 from __future__ import print_function
 
+import datetime
 import os
 from os import makedirs
 from os.path import exists
@@ -106,7 +107,7 @@ class RfiDataset(Dataset):
         self._selection_order = selection_order
         self._length = len(selection_order)
         self._sequence_length = sequence_length
-        print('Pid: {}\tLength: {}'.format(os.getpid(), self._length))
+        my_print('Length: {}'.format(self._length))
 
     def __len__(self):
         return self._length
@@ -127,15 +128,15 @@ def process_files(filename, rfi_label):
             files_to_process.append(complete_filename)
 
     if len(files_to_process) != 2:
-        print('The line counts do not match for: {0}'.format(filename))
+        my_print('The line counts do not match for: {0}'.format(filename))
         return
 
     # Load the files into numpy
-    print('Pid: {}\tLoading: {}'.format(os.getpid(), files_to_process[0]))
+    my_print('Loading: {}'.format(files_to_process[0]))
     data_frame = pd.read_csv(files_to_process[0], header=None, delimiter=' ')
     data = data_frame.values.flatten()
 
-    print('Pid: {}\tLoading: {}'.format(os.getpid(), files_to_process[1]))
+    my_print('Loading: {}'.format(files_to_process[1]))
     data_frame = pd.read_csv(files_to_process[1], header=None, delimiter=' ')
     labels = data_frame.values.flatten()
 
@@ -224,7 +225,7 @@ class Timer(object):
         self.timer = default_timer
 
     def __enter__(self):
-        print('Pid: {}\t{}\tStarting timer'.format(os.getpid(), self.name))
+        my_print('{}\tStarting timer'.format(self.name))
         self.start = self.timer()
         return self
 
@@ -233,4 +234,9 @@ class Timer(object):
         self.elapsed_secs = end - self.start
         self.elapsed = self.elapsed_secs
         if self.verbose:
-            print('Pid: {}\t{}\tElapsed time: {}'.format(os.getpid(), self.name, human_time(self.elapsed)))
+            my_print('{}\tElapsed time: {}'.format(self.name, human_time(self.elapsed)))
+
+
+def my_print(string):
+    now = datetime.datetime.now()
+    print('{}\t{}\t{}'.format(os.getpid(), now.strftime('%Y-%m-%d %H:%M:%S'), string))

@@ -3,7 +3,7 @@
 #
 #SBATCH --job-name=gmrt_cnn
 #SBATCH --account=pawsey0245
-#SBATCH --time=03:00:00
+#SBATCH --time=05:00:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=gpuq
