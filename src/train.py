@@ -30,6 +30,7 @@ import torch.utils.data as data
 from torch.autograd import Variable
 
 from histogram import Histogram
+from utilities import NUMBER_OF_CLASSES
 
 
 def train(model, rfi_data, rank=0, **kwargs):
@@ -87,14 +88,16 @@ def train_epoch(epoch, model, data_loader, optimizer, log_interval):
 
 def build_histogram(output, target_column, histogram_data):
     for values, column in zip(output.data.numpy(), target_column.numpy()):
-        histogram_data.append(values[column])
+        histogram_data['all'].append(values[column])
+        histogram_data[column].append(values[column])
 
 
 def test_epoch(model, data_loader, log_interval):
     model.eval()
     test_loss = 0
     correct = 0
-    histogram_data_correct_prediction = []
+    histogram_data = {key: [] for key in range(NUMBER_OF_CLASSES)}
+    histogram_data['all'] = []
     for batch_index, (x_data, periodogram_data, target) in enumerate(data_loader):
         x_data = Variable(x_data, volatile=True)
         periodogram_data = Variable(periodogram_data, volatile=True)
@@ -106,7 +109,7 @@ def test_epoch(model, data_loader, log_interval):
         pred = output.data.max(1)[1]
         target_column = target.data.max(1)[1]
         correct += pred.eq(target_column).sum()
-        build_histogram(output, target_column, histogram_data_correct_prediction)
+        build_histogram(output, target_column, histogram_data)
 
         if batch_index % log_interval == 0 and batch_index > 1:
             print('Pid: {}\tTest iteration: {}\tCorrect count: {}'.format(os.getpid(), batch_index, correct))
@@ -119,14 +122,15 @@ def test_epoch(model, data_loader, log_interval):
         len(data_loader.dataset),
         100. * correct / len(data_loader.dataset))
     )
-    histogram = Histogram(
-        histogram_data_correct_prediction,
-        title='Percentage of Correctly Predicted',
-        bins=10,
-        number_range=(0.0, 1.0),
-        histogram_type='numbers'
-    )
-    print(histogram.horizontal())
+    for key, value in histogram_data.items():
+        histogram = Histogram(
+            value,
+            title='Pid:{}\tPercentage of Correctly Predicted: {}'.format(os.getpid(), key),
+            bins=10,
+            number_range=(0.0, 1.0),
+            histogram_type='numbers'
+        )
+        print(histogram.horizontal())
 
 
 def adjust_learning_rate(optimizer, epoch, learning_rate_decay, start_learning_rate_decay, learning_rate):

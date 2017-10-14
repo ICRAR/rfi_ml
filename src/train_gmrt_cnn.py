@@ -162,7 +162,7 @@ def main():
     if kwargs['save'] is not None:
         with Timer('Saving model'):
             with open(kwargs['save'], 'wb') as save_file:
-                torch.save(model, save_file)
+                torch.save(model.state_dict(), save_file)
 
 
 if __name__ == '__main__':
