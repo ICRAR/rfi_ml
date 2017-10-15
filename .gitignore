@@ -2,3 +2,4 @@
 /src/data/data.h5
 /data/GMRT/
 /src/train.prof
+/src/gmrt_cnn.model.pth

@@ -20,6 +20,7 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+import logging
 
 import numpy as np
 import torch
@@ -28,8 +29,10 @@ import torch.optim as optim
 import torch.utils.data as data
 from torch.autograd import Variable
 
+from constants import NUMBER_OF_CLASSES
 from histogram import Histogram
-from utilities import NUMBER_OF_CLASSES, my_print
+
+LOGGER = logging.getLogger(__name__)
 
 
 def train(model, rfi_data, rank=0, **kwargs):
@@ -62,21 +65,21 @@ def train(model, rfi_data, rank=0, **kwargs):
 
 def train_epoch(epoch, model, data_loader, optimizer, log_interval):
     model.train()
-    for batch_idx, (x_data, periodogram_data, target) in enumerate(data_loader):
-        x_data = Variable(x_data)
-        periodogram_data = Variable(periodogram_data)
+    for batch_idx, (x_data_ts, x_data_raw, target) in enumerate(data_loader):
+        x_data_ts = Variable(x_data_ts)
+        x_data_raw = Variable(x_data_raw)
         target = Variable(target)
         optimizer.zero_grad()
-        output = model(x_data, periodogram_data)
+        output = model(x_data_ts, x_data_raw)
         if type(output.data) == torch.cuda.DoubleTensor:
             output = output.cpu()
         loss = functional.binary_cross_entropy(output, target)
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0 and batch_idx > 1:
-            my_print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            LOGGER.info('Train Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.6f}'.format(
                 epoch,
-                batch_idx * len(x_data),
+                batch_idx * len(x_data_ts),
                 len(data_loader.dataset),
                 100. * batch_idx / len(data_loader),
                 loss.data[0])
@@ -95,11 +98,11 @@ def test_epoch(model, data_loader, log_interval):
     correct = 0
     histogram_data = {key: [] for key in range(NUMBER_OF_CLASSES)}
     histogram_data['all'] = []
-    for batch_index, (x_data, periodogram_data, target) in enumerate(data_loader):
-        x_data = Variable(x_data, volatile=True)
-        periodogram_data = Variable(periodogram_data, volatile=True)
+    for batch_index, (x_data_ts, x_data_raw, target) in enumerate(data_loader):
+        x_data_ts = Variable(x_data_ts, volatile=True)
+        x_data_raw = Variable(x_data_raw, volatile=True)
         target = Variable(target)
-        output = model(x_data, periodogram_data)
+        output = model(x_data_ts, x_data_raw)
         if type(output.data) == torch.cuda.DoubleTensor:
             output = output.cpu()
         test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
@@ -109,10 +112,10 @@ def test_epoch(model, data_loader, log_interval):
         build_histogram(output, target_column, histogram_data)
 
         if batch_index % log_interval == 0 and batch_index > 1:
-            my_print('Test iteration: {}\tCorrect count: {}'.format(batch_index, correct))
+            LOGGER.info('Test iteration: {}, Correct count: {}'.format(batch_index, correct))
 
     test_loss /= len(data_loader.dataset)
-    my_print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+    LOGGER.info('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss,
         correct,
         len(data_loader.dataset),
@@ -133,6 +136,6 @@ def adjust_learning_rate(optimizer, epoch, learning_rate_decay, start_learning_r
     """ Sets the learning rate to the initial LR decayed  """
     lr_decay = learning_rate_decay ** max(epoch + 1 - start_learning_rate_decay, 0.0)
     new_learning_rate = learning_rate * lr_decay
-    my_print('New learning rate: {}'.format(new_learning_rate))
+    LOGGER.info('New learning rate: {}'.format(new_learning_rate))
     for param_group in optimizer.state_dict()['param_groups']:
         param_group['lr'] = new_learning_rate

@@ -23,10 +23,8 @@
 """
 
 """
-from __future__ import print_function
-
 import argparse
-
+import logging
 import numpy as np
 import torch
 import torch.multiprocessing as mp
@@ -34,8 +32,11 @@ import torch.nn as nn
 import torch.nn.functional as functional
 import torch.utils.data as data
 
+from constants import NUMBER_CHANNELS, NUMBER_OF_CLASSES
 from train import test_epoch, train
-from utilities import NUMBER_CHANNELS, NUMBER_OF_CLASSES, RfiData, Timer, build_data, my_print
+from utilities import RfiData, Timer, build_data
+
+LOGGER = logging.getLogger(__name__)
 
 
 class GmrtCNN(nn.Module):
@@ -51,31 +52,32 @@ class GmrtCNN(nn.Module):
         self.conv3 = nn.Conv1d(36, 72, kernel_size=2, stride=1)
         self.conv3.double()     # Force the Conv1d to use a double
         self.max_pool3 = nn.MaxPool1d(2, stride=2)
-        self.fc1a = nn.Linear(144, 36)
-        self.fc1a.double()       # Force the layer to a double
+        self.fc_convolution = nn.Linear(144, 36)
+        self.fc_convolution.double()       # Force the layer to a double
 
-        self.fc1b = nn.Linear(72, 36)
+        self.fc1a = nn.Linear(10, 50)
+        self.fc1a.double()       # Force the layer to a double
+        self.fc1b = nn.Linear(50, 50)
         self.fc1b.double()       # Force the layer to a double
+        self.fc1c = nn.Linear(50, 36)
+        self.fc1c.double()       # Force the layer to a double
 
         self.fc2 = nn.Linear(72, 36)
         self.fc2.double()       # Force the layer to use a double
         self.fc3 = nn.Linear(36, NUMBER_OF_CLASSES)
         self.fc3.double()       # Force the layer to use a double
 
-    def forward(self, input_data_raw, input_periodogram):
-        x = self.max_pool1(functional.relu(self.conv1(input_data_raw)))
+    def forward(self, input_data_ts, input_data_values):
+        x = self.max_pool1(functional.relu(self.conv1(input_data_ts)))
         x = self.max_pool2(functional.relu(self.conv2(x)))
         x = self.max_pool3(functional.relu(self.conv3(x)))
         x = x.view(x.size(0), -1)
         x = functional.dropout(x, p=self.keep_probability, training=self.training)
-        x = self.fc1a(x)
+        x = self.fc_convolution(x)
 
-        y = self.max_pool1(functional.relu(self.conv1(input_periodogram)))
-        y = self.max_pool2(functional.relu(self.conv2(y)))
-        y = self.max_pool3(functional.relu(self.conv3(y)))
-        y = y.view(y.size(0), -1)
-        y = functional.dropout(y, p=self.keep_probability, training=self.training)
+        y = self.fc1a(input_data_values)
         y = self.fc1b(y)
+        y = self.fc1c(y)
 
         z = torch.cat((x, y), dim=1)
         z = self.fc2(z)
@@ -86,6 +88,7 @@ class GmrtCNN(nn.Module):
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(process)d:%(levelname)s:%(name)s:%(message)s')
     parser = argparse.ArgumentParser(description='GMRT CNN Training')
     parser.add_argument('--batch-size', type=int, default=10000, metavar='N', help='input batch size for training (default: 10000)')
     parser.add_argument('--epochs', type=int, default=5, metavar='N', help='number of epochs to train (default: 5)')       # TODO:
@@ -106,7 +109,7 @@ def main():
     parser.add_argument('--save', type=str,  default=None, help='path to save the final model')
 
     kwargs = vars(parser.parse_args())
-    my_print(kwargs)
+    LOGGER.debug(kwargs)
 
     # If the have specified a seed get a random
     if kwargs['seed'] is not None:
@@ -115,11 +118,11 @@ def main():
         np.random.seed()
 
     if kwargs['use_gpu'] and torch.cuda.is_available():
-        my_print('Using cuda devices: {}'.format(torch.cuda.device_count()))
+        LOGGER.info('Using cuda devices: {}'.format(torch.cuda.device_count()))
         kwargs['cuda_device_count'] = torch.cuda.device_count()
         kwargs['using_gpu'] = True
     else:
-        my_print('Using CPU')
+        LOGGER.info('Using CPU')
         kwargs['cuda_device_count'] = 0
         kwargs['using_gpu'] = False
 

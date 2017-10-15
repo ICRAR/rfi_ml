@@ -25,7 +25,7 @@
 """
 from __future__ import print_function
 
-import datetime
+import logging
 import os
 from os import makedirs
 from os.path import exists
@@ -35,11 +35,13 @@ import h5py
 import numpy as np
 import pandas as pd
 from astropy.utils.console import human_time
-from scipy.signal import periodogram
+from scipy import stats
+from statsmodels.robust import scale
 from torch.utils.data import Dataset
 
-NUMBER_CHANNELS = 1
-NUMBER_OF_CLASSES = 2
+from constants import NUMBER_CHANNELS, NUMBER_OF_CLASSES
+
+LOGGER = logging.getLogger(__name__)
 
 
 class H5Exception(Exception):
@@ -107,7 +109,7 @@ class RfiDataset(Dataset):
         self._selection_order = selection_order
         self._length = len(selection_order)
         self._sequence_length = sequence_length
-        my_print('Length: {}'.format(self._length))
+        LOGGER.debug('Length: {}'.format(self._length))
 
     def __len__(self):
         return self._length
@@ -115,8 +117,22 @@ class RfiDataset(Dataset):
     def __getitem__(self, index):
         selection_index = self._selection_order[index]
         x_data = self._x_data[selection_index:selection_index + self._sequence_length]
-        _, periodogram_data = periodogram(x_data)
-        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), np.reshape(periodogram_data, (NUMBER_CHANNELS, -1)), self._y_data[selection_index]
+        description = stats.describe(x_data)
+        median = np.median(x_data)
+        median_absolute_deviation = scale.mad(x_data, c=1)
+        x_data_last = x_data[-1]
+        values = np.array([
+            x_data_last,
+            x_data_last - description.mean,
+            x_data_last - median,
+            x_data_last - median_absolute_deviation,
+            median,
+            description.mean,
+            description.variance,
+            description.skewness,
+            description.kurtosis,
+            median_absolute_deviation])
+        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), values, self._y_data[selection_index + self._sequence_length]
 
 
 def process_files(filename, rfi_label):
@@ -128,15 +144,15 @@ def process_files(filename, rfi_label):
             files_to_process.append(complete_filename)
 
     if len(files_to_process) != 2:
-        my_print('The line counts do not match for: {0}'.format(filename))
+        LOGGER.error('The line counts do not match for: {0}'.format(filename))
         return
 
     # Load the files into numpy
-    my_print('Loading: {}'.format(files_to_process[0]))
+    LOGGER.info('Loading: {}'.format(files_to_process[0]))
     data_frame = pd.read_csv(files_to_process[0], header=None, delimiter=' ')
     data = data_frame.values.flatten()
 
-    my_print('Loading: {}'.format(files_to_process[1]))
+    LOGGER.info('Loading: {}'.format(files_to_process[1]))
     data_frame = pd.read_csv(files_to_process[1], header=None, delimiter=' ')
     labels = data_frame.values.flatten()
 
@@ -219,13 +235,12 @@ def one_hot(labels, number_class):
 
 
 class Timer(object):
-    def __init__(self, name=None, verbose=True):
-        self.verbose = verbose
+    def __init__(self, name=None):
         self.name = '' if name is None else name
         self.timer = default_timer
 
     def __enter__(self):
-        my_print('{}\tStarting timer'.format(self.name))
+        LOGGER.info('{}, Starting timer'.format(self.name))
         self.start = self.timer()
         return self
 
@@ -233,10 +248,4 @@ class Timer(object):
         end = self.timer()
         self.elapsed_secs = end - self.start
         self.elapsed = self.elapsed_secs
-        if self.verbose:
-            my_print('{}\tElapsed time: {}'.format(self.name, human_time(self.elapsed)))
-
-
-def my_print(string):
-    now = datetime.datetime.now()
-    print('{}\t{}\t{}'.format(os.getpid(), now.strftime('%Y-%m-%d %H:%M:%S'), string))
+        LOGGER.info('{}, Elapsed time: {}'.format(self.name, human_time(self.elapsed)))
