@@ -35,11 +35,10 @@ import h5py
 import numpy as np
 import pandas as pd
 from astropy.utils.console import human_time
-from scipy import stats
 from statsmodels.robust import scale
 from torch.utils.data import Dataset
 
-from constants import NUMBER_CHANNELS, NUMBER_OF_CLASSES
+from constants import NUMBER_CHANNELS, NUMBER_OF_CLASSES, H5_VERSION
 
 LOGGER = logging.getLogger(__name__)
 
@@ -109,6 +108,10 @@ class RfiDataset(Dataset):
         self._selection_order = selection_order
         self._length = len(selection_order)
         self._sequence_length = sequence_length
+        self._actual_node = self._sequence_length / 2
+        self._median = np.median(x_data)
+        self._median_absolute_deviation = scale.mad(x_data, c=1)
+        self._mean = np.mean(x_data)
         LOGGER.debug('Length: {}'.format(self._length))
 
     def __len__(self):
@@ -117,22 +120,23 @@ class RfiDataset(Dataset):
     def __getitem__(self, index):
         selection_index = self._selection_order[index]
         x_data = self._x_data[selection_index:selection_index + self._sequence_length]
-        description = stats.describe(x_data)
-        median = np.median(x_data)
-        median_absolute_deviation = scale.mad(x_data, c=1)
-        x_data_last = x_data[-1]
-        values = np.array([
-            x_data_last,
-            x_data_last - description.mean,
-            x_data_last - median,
-            x_data_last - median_absolute_deviation,
-            median,
-            description.mean,
-            description.variance,
-            description.skewness,
-            description.kurtosis,
-            median_absolute_deviation])
-        return np.reshape(x_data, (NUMBER_CHANNELS, -1)), values, self._y_data[selection_index + self._sequence_length]
+        local_median = np.median(x_data)
+        local_median_absolute_deviation = scale.mad(x_data, c=1)
+        local_mean = np.mean(x_data)
+        # x_data_last = x_data[self._actual_node]
+
+        data = [self._median, self._median_absolute_deviation, self._mean, local_median, local_median_absolute_deviation, local_mean]
+        for item in x_data:
+            data.append(item)
+            data.append(item - self._mean)
+            data.append(item - self._median)
+            data.append(item - self._median_absolute_deviation)
+            data.append(item - local_mean)
+            data.append(item - local_median)
+            data.append(item - local_median_absolute_deviation)
+
+        # return np.reshape(x_data, (NUMBER_CHANNELS, -1)), values, self._y_data[selection_index + self._actual_node]
+        return np.array(data), self._y_data[selection_index + self._actual_node]
 
 
 def process_files(filename, rfi_label):
@@ -170,26 +174,29 @@ def build_data(**kwargs):
     """ Read data """
     output_file = os.path.join(kwargs['data_path'], kwargs['data_file'])
     if os.path.exists(output_file):
-        # All good nothing to do
-        return
+        with h5py.File(output_file, 'r') as h5_file:
+            # Everything matches
+            if 'version' in h5_file.attrs and h5_file.attrs['version'] == H5_VERSION:
+                # All good nothing to do
+                return
 
     # Open the output files
     with Timer('Processing input files'):
-        data0, labels0 = process_files('../data/GMRT/impulsive_broadband_simulation_random_norfi', 0)
         data1, labels1 = process_files('../data/GMRT/impulsive_broadband_simulation_random_5p', 1)
         data2, labels2 = process_files('../data/GMRT/impulsive_broadband_simulation_random_10p', 1)
         data3, labels3 = process_files('../data/GMRT/repetitive_rfi_timeseries', 1)
         data4, labels4 = process_files('../data/GMRT/repetitive_rfi_random_timeseries', 1)
+        # data0, labels0 = process_files('../data/GMRT/impulsive_broadband_simulation_random_norfi', 0)
 
     # Concatenate
     with Timer('Concatenating data'):
-        labels = np.concatenate((labels0, labels1, labels2, labels3, labels4))
-        data = np.concatenate((data0, data1, data2, data3, data4))
+        labels = np.concatenate((labels1, labels2, labels3, labels4))
+        data = np.concatenate((data1, data2, data3, data4))
 
     # Standardise and one hot
     with Timer('Standardise & One hot'):
         labels = one_hot(labels, NUMBER_OF_CLASSES)
-        data = standardize(data)
+        # data = normalize(data)
 
     with Timer('Saving to {0}'.format(output_file)):
         if not exists(kwargs['data_path']):
@@ -197,6 +204,7 @@ def build_data(**kwargs):
         with h5py.File(output_file, 'w') as h5_file:
             h5_file.attrs['number_channels'] = NUMBER_CHANNELS
             h5_file.attrs['number_classes'] = NUMBER_OF_CLASSES
+            h5_file.attrs['version'] = H5_VERSION
 
             data_group = h5_file.create_group('data')
             data_group.attrs['length_data'] = len(data)
@@ -218,11 +226,11 @@ def get_h5_file(args):
     raise H5Exception('You need to call build data first')
 
 
-def standardize(all_data):
-    """ Standardize data """
-    all_data = (all_data - np.mean(all_data)) / np.std(all_data)
-
-    return all_data
+def normalize(all_data):
+    """ normalize data """
+    min_value = np.min(all_data)
+    max_value = np.max(all_data)
+    return (all_data - min_value) / (max_value - min_value)
 
 
 def one_hot(labels, number_class):

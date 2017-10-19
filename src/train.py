@@ -65,12 +65,12 @@ def train(model, rfi_data, rank=0, **kwargs):
 
 def train_epoch(epoch, model, data_loader, optimizer, log_interval):
     model.train()
-    for batch_idx, (x_data_ts, x_data_raw, target) in enumerate(data_loader):
-        x_data_ts = Variable(x_data_ts)
+    for batch_idx, (x_data_raw, target) in enumerate(data_loader):
+        # x_data_ts = Variable(x_data_ts)
         x_data_raw = Variable(x_data_raw)
         target = Variable(target)
         optimizer.zero_grad()
-        output = model(x_data_ts, x_data_raw)
+        output = model(x_data_raw)
         if type(output.data) == torch.cuda.DoubleTensor:
             output = output.cpu()
         loss = functional.binary_cross_entropy(output, target)
@@ -79,7 +79,7 @@ def train_epoch(epoch, model, data_loader, optimizer, log_interval):
         if batch_idx % log_interval == 0 and batch_idx > 1:
             LOGGER.info('Train Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.6f}'.format(
                 epoch,
-                batch_idx * len(x_data_ts),
+                batch_idx * len(x_data_raw),
                 len(data_loader.dataset),
                 100. * batch_idx / len(data_loader),
                 loss.data[0])
@@ -98,14 +98,14 @@ def test_epoch(model, data_loader, log_interval):
     correct = 0
     histogram_data = {key: [] for key in range(NUMBER_OF_CLASSES)}
     histogram_data['all'] = []
-    for batch_index, (x_data_ts, x_data_raw, target) in enumerate(data_loader):
-        x_data_ts = Variable(x_data_ts, volatile=True)
+    for batch_index, (x_data_raw, target) in enumerate(data_loader):
+        # x_data_ts = Variable(x_data_ts, volatile=True)
         x_data_raw = Variable(x_data_raw, volatile=True)
         target = Variable(target)
-        output = model(x_data_ts, x_data_raw)
+        output = model(x_data_raw)
         if type(output.data) == torch.cuda.DoubleTensor:
             output = output.cpu()
-        test_loss += functional.binary_cross_entropy(output, target, size_average=False).data[0]     # sum up batch loss
+        test_loss += functional.binary_cross_entropy(output, target).data[0]
         pred = output.data.max(1)[1]
         target_column = target.data.max(1)[1]
         correct += pred.eq(target_column).sum()
