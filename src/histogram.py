@@ -95,9 +95,9 @@ class Histogram(object):
 if __name__ == "__main__":
     d = np.random.normal(size=1000)
     h = Histogram(d, bins=10, title='Bars Test Title')
-    print h.vertical(15)
-    print h.horizontal(5)
+    print(h.vertical(15))
+    print(h.horizontal(5))
 
     h = Histogram(d, bins=10, title='Numbers Test Title', histogram_type='numbers', number_range=(math.floor(d.min()), math.ceil(d.max())))
-    print h.vertical()
-    print h.horizontal()
+    print(h.vertical())
+    print(h.horizontal())
