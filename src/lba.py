@@ -26,9 +26,11 @@ Utilities for loading LBA files
 """
 
 import mmap
+import math
 import os
 import sys
 import numpy as np
+from scipy import signal
 import matplotlib.pyplot as plt
 
 
@@ -295,6 +297,33 @@ def fft_power_spectrum(samples):
     return np.sum(sum, axis=0)
 
 
+def create_spectrogram(p):
+    return [signal.spectrogram(p[:, freq], fs=32000000) for freq in range(p.shape[1])]
+
+
+def merge_spectrograms(spectograms, start_frequency, bandwidth, normalise_local=False):
+    fs = []
+    sxxs = []
+    for freq_index, (f, t, sxx) in enumerate(spectograms):
+        f = (f / np.max(f)) * bandwidth + start_frequency + freq_index * bandwidth
+        fs.append(f)
+        if normalise_local:
+            sxx = (sxx - np.min(sxx)) / np.max(sxx)
+        sxxs.append(sxx)
+
+    return np.concatenate(fs), spectograms[0][1], np.concatenate(sxxs)
+
+
+def show_spectrogram(spectogram, title):
+    f, t, sxx = spectogram
+    plt.xlabel("Time [sec]")
+    plt.ylabel("Frequency [MHz]")
+    plt.title(title)
+    plt.pcolormesh(t, f, sxx)
+    plt.colorbar()
+    plt.show()
+
+
 def run_main(filename):
     """
     Runs a bunch of tests on the provided file
@@ -305,26 +334,48 @@ def run_main(filename):
         lba = LBAFile(f)
         print("\n", lba.header)
 
-        num_samples = 10240
+        num_samples = 102400
+        # Data is at 6.7GHz
+        # Each frequency channel is 16MHz wide (stacked upward from 6.7GHz)
+        # X = samples, Y = frequency band 0 to 4, Z = P0 or P1
         samples = lba.read(samples=num_samples)
         # Split up into P0 and P1
-        # X = samples, Y = P0 for frequency
+        # X = samples, Y = P0 for frequency band 0 to 4
         all_p0 = samples[:, :, 0]
-        # X = samples, Y = P1 for frequency
+        # X = samples, Y = P1 for frequency band 0 to 4
         all_p1 = samples[:, :, 1]
 
         # show_histogram(all_p0, "p0")
         # show_histogram(all_p1, "p1")
 
-        for index, p in enumerate((all_p0, all_p1)):
-            # y = fft_sum_amplitudes(p)
-            # x, y = fft_freq_sort(fft_power_spectrum(p))
+        for index, p in enumerate((all_p0,)):
+            x, y = fft_freq_sort(fft_sum_amplitudes(p))
+            #plt.xlabel("Frequency")
+            #plt.ylabel("Amplitude")
 
-            x, y = fft_linspace(fft_sum_amplitudes2(p))
-            plt.plot(x, y, label="p{0}".format(index))
+            # x, y = fft_linspace(fft_sum_amplitudes2(p))
+            #plt.plot(x, y, label="p{0}".format(index))
 
-        plt.legend()
-        plt.show()
+        #plt.legend()
+        #plt.show()
+
+        """for index, p in enumerate((all_p0,)):
+            for freq in range(4):
+                plt.title("Frequency band {0}".format(freq + 1))
+                spectrogram(p[:, freq])
+                plt.show()
+        """
+
+        spectograms_p0 = create_spectrogram(all_p0)
+        spectograms_p1 = create_spectrogram(all_p1)
+
+        for index, s in enumerate((spectograms_p0, spectograms_p1)):
+
+            f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=True)
+            show_spectrogram((f, t, sxx), "P{0} {1} local normalised test".format(index, os.path.basename(filename)))
+
+            f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=False)
+            show_spectrogram((f, t, sxx), "P{0} {1} non normalised test".format(index, os.path.basename(filename)))
 
 
 if __name__ == "__main__":
