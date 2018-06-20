@@ -30,6 +30,7 @@ import math
 import os
 import sys
 import numpy as np
+import cupy as cp
 from scipy import signal
 import matplotlib.pyplot as plt
 
@@ -148,7 +149,7 @@ class LBAFile(object):
         self.mm.seek(data_start + sample_offset, os.SEEK_SET)
 
         # X = samples, Y = frequency, Z = polarisation
-        nparray = np.zeros((samples, num_freq, 2))
+        nparray = np.zeros((samples, num_freq, 2), dtype=np.int8)
 
         samples_output = 0  # Number of samples we dumped into nparray
         samples_read = 0  # Number of samples read, including skipped samples every 32M samples
@@ -192,7 +193,7 @@ def print_sample_stats(samples):
     :param samples:
     :return:
     """
-    unique, counts = np.unique(samples, return_counts=True)
+    unique, counts = cp.unique(samples, return_counts=True)
     counts = dict(zip(unique, counts))
     print("Shape {0}".format(samples.shape))
     print("Counts {0}".format(counts))
@@ -215,7 +216,7 @@ def show_histogram(samples, title):
     :param title:
     :return:
     """
-    plt.hist(np.reshape(samples, samples.shape[0] * 4))
+    plt.hist(cp.reshape(samples, samples.shape[0] * 4))
     plt.title(title)
     plt.xlabel("polarisation")
     plt.ylabel("count")
@@ -224,14 +225,14 @@ def show_histogram(samples, title):
 
 def fft_freq_sort(samples):
     """
-    Uses np.fft.fftfreq to generate sample frequencies.
+    Uses cp.fft.fftfreq to generate sample frequencies.
     Frequencies and samples are sorted from lowest to highest frequency to ensure
     results are plotted correctly.
     :param samples:
     :return:
     """
-    freq_sample = np.fft.fftfreq(samples.shape[0], d=32000000)
-    sort_indices = np.argsort(freq_sample)
+    freq_sample = cp.fft.fftfreq(samples.shape[0], d=32000000)
+    sort_indices = cp.argsort(freq_sample)
     return freq_sample[sort_indices], samples[sort_indices]
 
 
@@ -242,7 +243,7 @@ def fft_linspace(samples):
     :param samples:
     :return:
     """
-    freq_sample = np.linspace(0, 1.0 / (2.0 * 32000000), samples.shape[0] // 2)
+    freq_sample = cp.linspace(0, 1.0 / (2.0 * 32000000), samples.shape[0] // 2)
     return freq_sample, samples[0:samples.shape[0] // 2]
 
 
@@ -257,12 +258,15 @@ def fft_sum_amplitudes(samples):
     # 32000000 samples per second
     # Fourier transform and sum amplitudes
     # fftfreq provides x axis values, amplitude is y axis values
-    amps = []
+    amps = None #cp.zeros(samples.shape[0])
     for freq in range(samples.shape[1]):
-        ft = np.fft.fft(samples[:, freq])
-        amps.append(np.abs(ft))
+        ft = cp.abs(cp.fft.rfft(samples[:, freq]))
+        if amps is None:
+            amps = ft
+        else :
+            amps += ft
 
-    return np.sum(amps, axis=0)
+    return amps
 
 
 def fft_sum_amplitudes2(samples):
@@ -275,9 +279,9 @@ def fft_sum_amplitudes2(samples):
     """
     amps = []
     for freq in range(samples.shape[1]):
-        ft = np.fft.fft(samples[:, freq])
-        amps.append(2.0 / samples.shape[0] * np.abs(ft))
-    return np.sum(amps, axis=0)
+        ft = cp.fft.fft(samples[:, freq])
+        amps.append(2.0 / samples.shape[0] * cp.abs(ft))
+    return cp.sum(amps, axis=0)
 
 
 def fft_power_spectrum(samples):
@@ -291,37 +295,76 @@ def fft_power_spectrum(samples):
     """
     sum = []
     for freq in range(samples.shape[1]):
-        ft = np.fft.fft(samples[:, freq])
-        sum.append((np.abs(ft)**2) / samples.shape[0])
+        ft = cp.fft.fft(samples[:, freq])
+        sum.append((cp.abs(ft)**2) / samples.shape[0])
 
-    return np.sum(sum, axis=0)
+    return cp.sum(sum, axis=0)
 
 
 def create_spectrogram(p):
-    return [signal.spectrogram(p[:, freq], fs=32000000) for freq in range(p.shape[1])]
+    def handle_tuple(t):
+        return cp.array(t[0]), t[1], cp.array(t[2])
+
+    return [handle_tuple(signal.spectrogram(cp.asnumpy(p[:, freq]), fs=32000000)) for freq in range(p.shape[1])]
 
 
-def merge_spectrograms(spectograms, start_frequency, bandwidth, normalise_local=False):
-    fs = []
-    sxxs = []
-    for freq_index, (f, t, sxx) in enumerate(spectograms):
-        f = (f / np.max(f)) * bandwidth + start_frequency + freq_index * bandwidth
-        fs.append(f)
+def merge_spectrograms(spectrograms, start_frequency, bandwidth, normalise_local=False):
+    fs = cp.zeros((len(spectrograms), spectrograms[0][0].shape[0]))
+    sxxs = cp.zeros((len(spectrograms), spectrograms[0][2].shape[0], spectrograms[0][2].shape[1]))
+    for freq_index, (f, t, sxx) in enumerate(spectrograms):
+        f = (f / cp.max(f)) * bandwidth + start_frequency + freq_index * bandwidth
+        fs[freq_index] = f
         if normalise_local:
-            sxx = (sxx - np.min(sxx)) / np.max(sxx)
-        sxxs.append(sxx)
+            sxx = (sxx - cp.min(sxx)) / cp.max(sxx)
+        sxxs[freq_index] = sxx
 
-    return np.concatenate(fs), spectograms[0][1], np.concatenate(sxxs)
+    return cp.concatenate(fs), spectrograms[0][1], cp.concatenate(sxxs)
 
 
 def show_spectrogram(spectogram, title):
     f, t, sxx = spectogram
+    plt.figure(figsize=(20, 10), dpi=100)
     plt.xlabel("Time [sec]")
     plt.ylabel("Frequency [MHz]")
     plt.title(title)
-    plt.pcolormesh(t, f, sxx)
+    plt.pcolormesh(cp.asnumpy(t), cp.asnumpy(f), cp.asnumpy(sxx))
     plt.colorbar()
+    plt.savefig("{0}.png".format(title))
+    #plt.show()
+
+
+def plot_spectrograms(polarisation, filename, pindex):
+    s = create_spectrogram(polarisation)
+    for sindex, (f, t, sxx) in enumerate(s):
+        show_spectrogram((f, t, sxx), "P{0} {1} channel {2}".format(pindex, filename, sindex))
+    f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=True)
+    show_spectrogram((f, t, sxx), "P{0} {1} local normalised test".format(pindex, filename))
+
+    f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=False)
+    show_spectrogram((f, t, sxx), "P{0} {1} non normalised test".format(pindex, filename))
+
+
+def plot_fft(polarisation, filename, pindex):
+    x, y = fft_freq_sort(fft_sum_amplitudes(polarisation))
+    plt.title("P{0} {1} fft".format(pindex, filename))
+    plt.xlabel("Frequency")
+    plt.ylabel("Amplitude")
+
+    #x, y = fft_linspace(fft_sum_amplitudes2(polarisation))
+    plt.plot(cp.asnumpy(x), cp.asnumpy(y), label="p{0}".format(pindex), lw=0.5)
+    plt.legend()
     plt.show()
+
+
+def plot_over_time(polarisation, filename, pindex):
+    for freq in range(polarisation.shape[1]):
+        y = polarisation[:, freq]
+        x = cp.linspace(0, y.shape[0] / 32000000.0, y.shape[0])
+        plt.title("P{0} {1} over time".format(pindex, filename))
+        plt.xlabel("Time"),
+        plt.ylabel("Power")
+        plt.plot(x, y)
+        plt.show()
 
 
 def run_main(filename):
@@ -338,48 +381,28 @@ def run_main(filename):
         # Data is at 6.7GHz
         # Each frequency channel is 16MHz wide (stacked upward from 6.7GHz)
         # X = samples, Y = frequency band 0 to 4, Z = P0 or P1
+        # mlgpu, 14000M
+        print("Reading samples...")
         samples = lba.read(samples=num_samples)
         # Split up into P0 and P1
         # X = samples, Y = P0 for frequency band 0 to 4
-        all_p0 = samples[:, :, 0]
+        all_p0 = cp.array(samples[:, :, 0])
         # X = samples, Y = P1 for frequency band 0 to 4
-        all_p1 = samples[:, :, 1]
+        all_p1 = cp.array(samples[:, :, 1])
 
-        # show_histogram(all_p0, "p0")
-        # show_histogram(all_p1, "p1")
+        basename = os.path.basename(filename)
 
-        for index, p in enumerate((all_p0,)):
-            x, y = fft_freq_sort(fft_sum_amplitudes(p))
-            #plt.xlabel("Frequency")
-            #plt.ylabel("Amplitude")
+        print("Creating plots...")
+        for index, polarisation in enumerate((all_p0, all_p1)):
+            print("Plotting FFT")
+            plot_fft(polarisation, basename, index)
+            print("Plotting spectrogram")
+            plot_spectrograms(polarisation, basename, index)
+            #plot_over_time(polarisation, basename, index)
 
-            # x, y = fft_linspace(fft_sum_amplitudes2(p))
-            #plt.plot(x, y, label="p{0}".format(index))
-
-        #plt.legend()
-        #plt.show()
-
-        """for index, p in enumerate((all_p0,)):
-            for freq in range(4):
-                plt.title("Frequency band {0}".format(freq + 1))
-                spectrogram(p[:, freq])
-                plt.show()
-        """
-
-        spectograms_p0 = create_spectrogram(all_p0)
-        spectograms_p1 = create_spectrogram(all_p1)
-
-        for index, s in enumerate((spectograms_p0, spectograms_p1)):
-
-            f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=True)
-            show_spectrogram((f, t, sxx), "P{0} {1} local normalised test".format(index, os.path.basename(filename)))
-
-            f, t, sxx = merge_spectrograms(s, 6700, 16, normalise_local=False)
-            show_spectrogram((f, t, sxx), "P{0} {1} non normalised test".format(index, os.path.basename(filename)))
 
 
 if __name__ == "__main__":
     run_main("../data/v255ae_At_072_060000.lba")
-    run_main("../data/v255ae_Mp_072_060000.lba")
-    run_main("../data/vt255ae_Pa_072_060000.lba")
-
+    # run_main("../data/v255ae_Mp_072_060000.lba")
+    # run_main("../data/vt255ae_Pa_072_060000.lba")
