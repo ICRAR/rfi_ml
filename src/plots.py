@@ -169,6 +169,11 @@ class LBAPlotter(object):
         return "{0} {1}".format(title, plot_title)
 
     @staticmethod
+    def fix_freq(f, freq_index):
+        f /= 1e6
+        f += 6700.0 + 16.0 * freq_index
+
+    @staticmethod
     def create_sample_statistics(samples):
         """
         Prints some counting statistics for the provided samples
@@ -201,12 +206,14 @@ class LBAPlotter(object):
         """
         x = [-3, -1, 1, 3]
         y = [sample_statistics["counts"][i] for i in x]
+        fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.bar(x, y)
         plt.title(self.get_plot_title("sample statistics histogram"))
         plt.xlabel("Sample")
         plt.ylabel("Count")
         plt.savefig(self.get_output_filename("sample_statistics_histogram.png"))
-        plt.gcf().clear()
+        fig.clear()
+        plt.close(fig)
 
     def output_sample_statistics(self, samples):
         # Sample statistics
@@ -237,14 +244,86 @@ class LBAPlotter(object):
 
     def save_spectrogram(self, spectogram, title="spectrogram", filename="spectrogram.png"):
         f, t, sxx = spectogram
-        plt.figure(figsize=(16, 9), dpi=80)
+        fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Time [sec]")
         plt.ylabel("Frequency [MHz]")
         plt.title(self.get_plot_title(title))
         plt.pcolormesh(t, f, sxx)
         plt.colorbar()
         plt.savefig(self.get_output_filename(filename))
-        plt.gcf().clear()
+        fig.clear()
+        plt.close(fig)
+
+    @staticmethod
+    def create_periodogram(freq):
+        return signal.periodogram(freq, fs=SAMPLE_RATE)
+
+    def save_periodogram(self, periodogram):
+        f, pxx = periodogram
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power Spectral Density")
+        plt.title(self.get_plot_title("periodogram"))
+        plt.semilogy(f, pxx)
+        plt.savefig(self.get_output_filename("periodogram"))
+        fig.clear()
+        plt.close(fig)
+
+    @staticmethod
+    def create_welch(freq):
+        return signal.welch(freq, fs=SAMPLE_RATE)
+
+    def save_welch(self, welch):
+        f, spec = welch
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power Spectral Density")
+        plt.title(self.get_plot_title("welch"))
+        plt.semilogy(f, spec)
+        plt.grid()
+        plt.savefig(self.get_output_filename("welch"))
+        fig.clear()
+        plt.close(fig)
+
+    def create_lombscargle(self, samples):
+        start = self.sample_offset / SAMPLE_RATE
+        end = start + self.num_samples / SAMPLE_RATE
+        times = np.linspace(start, end, samples.shape[0])
+
+        start = 0.001
+        end = 1.6e6
+        freqs = np.linspace(start, end, 1000)
+        return freqs, signal.lombscargle(times, samples, freqs, normalize=True)
+
+    def save_lombscargle(self, lombscargle):
+        f, pgram = lombscargle
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power Spectral Density")
+        plt.title(self.get_plot_title("lombscargle"))
+        plt.plot(f, pgram)
+        plt.savefig(self.get_output_filename("lombscargle"))
+        fig.clear()
+        plt.close(fig)
+
+    def create_fft(self, samples):
+        ft = np.fft.rfft(samples)
+        f = np.fft.rfftfreq(samples.shape[0], d=SAMPLE_RATE)
+        f /= np.max(f)
+        f *= 16.0  # TODO: This isn't quite correct yet
+        np.abs(ft, ft)
+        return f, ft
+
+    def save_fft(self, fft):
+        f, ft = fft
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power")
+        plt.title(self.get_plot_title("fft"))
+        plt.plot(f, ft)
+        plt.savefig(self.get_output_filename("fft"))
+        fig.clear()
+        plt.close(fig)
 
     def __call__(self):
         # Firstly, create the output directory
@@ -277,13 +356,35 @@ class LBAPlotter(object):
                     os.makedirs(self.get_output_filename(), exist_ok=True)
 
                     self.output_sample_statistics(freq_samples)
+
+                    # Spectrogram for this frequency
                     f, t, sxx = self.create_spectrogram(freq_samples)
                     # Calculate the actual frequencies for the spectrogram
-                    f /= 1e6
-                    f += 6700 + 16 * freq
+                    self.fix_freq(f, freq)
                     spectrogram = (f, t, sxx)
                     spectrograms.append(spectrogram)
                     self.save_spectrogram(spectrogram)
+
+                    # Periodogram for this frequency
+                    f, pxx = self.create_periodogram(freq_samples)
+                    self.fix_freq(f, freq)
+                    self.save_periodogram((f, pxx))
+
+                    # Welch
+                    f, spec = self.create_welch(freq_samples)
+                    self.fix_freq(f, freq)
+                    self.save_welch((f, spec))
+
+                    # Lombscargle
+                    f, pxx = self.create_lombscargle(freq_samples)
+                    self.fix_freq(f, freq)
+                    self.save_lombscargle((f, pxx))
+
+                    # FFT
+                    f, ft = self.create_fft(freq_samples)
+                    self.fix_freq(f, freq)
+                    self.save_fft((f, ft))
+
 
                 self.frequency = None
 
