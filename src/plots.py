@@ -29,6 +29,7 @@ import cupy as cp
 from scipy import signal
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
 from jobs import JobQueue
 from lba import LBAFile
 import os
@@ -292,7 +293,7 @@ class LBAPlotter(object):
 
         start = 0.001
         end = 1.6e6
-        freqs = np.linspace(start, end, 1000)
+        freqs = np.linspace(start, end, 1000) * 10
         return freqs, signal.lombscargle(times, samples, freqs, normalize=True)
 
     def save_lombscargle(self, lombscargle):
@@ -309,8 +310,6 @@ class LBAPlotter(object):
     def create_fft(self, samples):
         ft = np.fft.rfft(samples)
         f = np.fft.rfftfreq(samples.shape[0], d=SAMPLE_RATE)
-        f /= np.max(f)
-        f *= 16.0  # TODO: This isn't quite correct yet
         np.abs(ft, ft)
         return f, ft
 
@@ -322,6 +321,20 @@ class LBAPlotter(object):
         plt.title(self.get_plot_title("fft"))
         plt.plot(f, ft)
         plt.savefig(self.get_output_filename("fft"))
+        fig.clear()
+        plt.close(fig)
+
+    def create_psd(self, samples):
+        return mlab.psd(samples, Fs=SAMPLE_RATE)
+
+    def save_psd_asd(self, psd, type):
+        Pxx, freqs = psd
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel(type)
+        plt.title(self.get_plot_title(type))
+        plt.plot(freqs, Pxx)
+        plt.savefig(self.get_output_filename(type))
         fig.clear()
         plt.close(fig)
 
@@ -385,6 +398,14 @@ class LBAPlotter(object):
                     self.fix_freq(f, freq)
                     self.save_fft((f, ft))
 
+                    # power spectral density
+                    Pxx, f = self.create_psd(freq_samples)
+                    self.fix_freq(f, freq)
+                    self.save_psd_asd((Pxx, f), "psd")
+
+                    # amplitude spectral density
+                    np.sqrt(Pxx, Pxx)
+                    self.save_psd_asd((Pxx, f), "asd")
 
                 self.frequency = None
 
