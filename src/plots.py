@@ -28,6 +28,8 @@ Methods to generate a variety of plots from lba files
 import cupy as cp
 from scipy import signal
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 from jobs import JobQueue
