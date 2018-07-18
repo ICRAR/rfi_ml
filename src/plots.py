@@ -46,6 +46,15 @@ SAMPLE_RATE = 32000000
 
 
 class LBAPlotter(object):
+    # Frequency range for each channel within a polarisation
+    # http://www.atnf.csiro.au/vlbi/dokuwiki/doku.php/lbaops/lbamar2018/v255ae
+    channel_frequency_map = [
+        (6300, 6316),  # f1
+        (6316, 6332),  # f2
+        (6642, 6658),  # f3
+        (6658, 6674)   # f4
+    ]
+
     def __init__(self, filename, out_directory, sample_offset=0, num_samples=0):
         self.filename = filename
         self.basefilename = os.path.basename(self.filename)
@@ -71,12 +80,13 @@ class LBAPlotter(object):
                 title += " f{0}".format(self.frequency)
         return "{0} {1}".format(title, plot_title)
 
-    @staticmethod
-    def fix_freq(f, freq_index):
+    @classmethod
+    def fix_freq(cls, f, freq_index):
+        (freq_start, freq_end) = cls.channel_frequency_map[freq_index]
         f -= np.min(f)
         f /= np.max(f)
-        f *= 16.0
-        f += 6700.0 + 16.0 * freq_index
+        f *= (freq_end - freq_start)
+        f += freq_start
 
     @staticmethod
     def create_sample_statistics(samples):
@@ -170,9 +180,10 @@ class LBAPlotter(object):
         f, pxx = periodogram
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Frequency [MHz]")
-        plt.ylabel("Power Spectral Density")
+        plt.ylabel("Power Spectral Density [V/rtMHz]")
         plt.title(self.get_plot_title("periodogram"))
-        plt.semilogy(f, pxx)
+        plt.grid()
+        plt.plot(f, pxx)
         plt.savefig(self.get_output_filename("periodogram"))
         fig.clear()
         plt.close(fig)
@@ -185,10 +196,10 @@ class LBAPlotter(object):
         f, spec = welch
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Frequency [MHz]")
-        plt.ylabel("Power Spectral Density")
+        plt.ylabel("Power Spectral Density [V/rtMHz]")
         plt.title(self.get_plot_title("welch"))
-        plt.semilogy(f, spec)
         plt.grid()
+        plt.plot(f, spec)
         plt.savefig(self.get_output_filename("welch"))
         fig.clear()
         plt.close(fig)
@@ -207,45 +218,67 @@ class LBAPlotter(object):
         f, pgram = lombscargle
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Frequency [MHz]")
-        plt.ylabel("Power Spectral Density")
+        plt.ylabel("Power Spectral Density [V/rtMHz]")
         plt.title(self.get_plot_title("lombscargle"))
+        plt.grid()
         plt.plot(f, pgram)
         plt.savefig(self.get_output_filename("lombscargle"))
         fig.clear()
         plt.close(fig)
 
-    def create_fft(self, samples):
+    def create_rfft(self, samples):
         ft = np.fft.rfft(samples * signal.windows.tukey(samples.shape[0], sym=False))
         f = np.fft.rfftfreq(samples.shape[0], d=SAMPLE_RATE)
         np.abs(ft, ft)
         return f, ft
 
-    def save_fft(self, fft):
+    def save_rfft(self, fft):
         f, ft = fft
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Frequency [MHz]")
-        plt.ylabel("Power")
+        plt.ylabel("Power [V]")
         plt.title(self.get_plot_title("fft"))
+        plt.grid()
         plt.plot(f, ft)
         plt.savefig(self.get_output_filename("fft"))
+        fig.clear()
+        plt.close(fig)
+
+    def create_ifft(self, samples):
+        ft = np.fft.fft(samples * signal.windows.tukey(samples.shape[0]))
+        f = np.fft.fftfreq(samples.shape[0], d=SAMPLE_RATE)
+        return f, np.imag(ft)
+
+    def save_ifft(self, fft):
+        f, ft = fft
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel("Frequency [MHz]")
+        plt.ylabel("Power [V]")
+        plt.title(self.get_plot_title("ifft"))
+        plt.grid()
+        plt.plot(f, ft)
+        plt.savefig(self.get_output_filename("ifft"))
         fig.clear()
         plt.close(fig)
 
     def create_psd(self, samples):
         return mlab.psd(samples, Fs=SAMPLE_RATE, window=signal.get_window(('tukey', 0.5), 256))
 
-    def save_psd_asd(self, psd, type):
+    def save_psd(self, psd, type, ylabel):
         Pxx, freqs = psd
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.xlabel("Frequency [MHz]")
-        plt.ylabel(type)
+        plt.ylabel(ylabel)
         plt.title(self.get_plot_title(type))
+        plt.grid()
         plt.plot(freqs, Pxx)
         plt.savefig(self.get_output_filename(type))
         fig.clear()
         plt.close(fig)
 
     def __call__(self):
+        matplotlib.rc('font', weight='normal', size=18)
+
         # Firstly, create the output directory
         os.makedirs(self.out_directory, exist_ok=True)
 
@@ -259,25 +292,21 @@ class LBAPlotter(object):
         # Do global things across all samples
         self.output_sample_statistics(samples)
 
-        # Split into p0 and p1
-        p0 = samples[:, :, 0]
-        p1 = samples[:, :, 1]
-        for pindex, p in enumerate((p0, p1)):
-            # Do things for each polarisation
+        # Iterate over each of the two polarisations
+        for pindex in range(samples.shape[2]):
+            p = samples[:, :, pindex]
+
             self.polarisation = pindex
             os.makedirs(self.get_output_filename(), exist_ok=True)
-
             self.output_sample_statistics(p)
 
-            spectrograms = []
-
+            spectrogram_groups = [[], []]  # freq1, freq2 : freq3, freq4
+            # Iterate over each of the four frequencies
             for freq in range(p.shape[1]):
-                # Do things for each frequency
                 freq_samples = p[:, freq]
 
                 self.frequency = freq
                 os.makedirs(self.get_output_filename(), exist_ok=True)
-
                 self.output_sample_statistics(freq_samples)
 
                 # Spectrogram for this frequency
@@ -285,7 +314,7 @@ class LBAPlotter(object):
                 # Calculate the actual frequencies for the spectrogram
                 self.fix_freq(f, freq)
                 spectrogram = (f, t, sxx)
-                spectrograms.append(spectrogram)
+                spectrogram_groups[freq // 2].append(spectrogram)
                 self.save_spectrogram(spectrogram)
 
                 # Periodogram for this frequency
@@ -306,34 +335,40 @@ class LBAPlotter(object):
                 except ZeroDivisionError:
                     print("Zero division in Lombscargle")
 
-                # FFT
-                f, ft = self.create_fft(freq_samples)
+                # RFFT
+                f, ft = self.create_rfft(freq_samples)
                 self.fix_freq(f, freq)
-                self.save_fft((f, ft))
+                self.save_rfft((f, ft))
+
+                # IFFT
+                f, ft = self.create_ifft(freq_samples)
+                self.fix_freq(f, freq)
+                self.save_ifft((f, ft))
 
                 # power spectral density
                 Pxx, f = self.create_psd(freq_samples)
                 self.fix_freq(f, freq)
-                self.save_psd_asd((Pxx, f), "psd")
+                self.save_psd((Pxx, f), "Power Spectral Density", "Power Spectral Density [V/rtMHz]")
 
                 # amplitude spectral density
                 np.sqrt(Pxx, Pxx)
-                self.save_psd_asd((Pxx, f), "asd")
+                self.save_psd((Pxx, f), "Amplitude Spectral Density", "Amplitude Spectral Density [sqrt(V/rtMHz)]")
 
             self.frequency = None
 
             # Create merged spectrograms for this p
-            merged = self.merge_spectrograms(spectrograms)
-            merged_normalised = self.merge_spectrograms(spectrograms, normalise_local=True)
-            self.save_spectrogram(merged, "merged", "spectrogram_merged.png")
-            self.save_spectrogram(merged_normalised, "merged local normalisation", "spectrogram_merged_normalised.png")
+            for index, group in enumerate(spectrogram_groups):
+                merged = self.merge_spectrograms(group)
+                merged_normalised = self.merge_spectrograms(group, normalise_local=True)
+                self.save_spectrogram(merged, "group {0} merged".format(index), "spectrogram_group{0}_merged.png".format(index))
+                self.save_spectrogram(merged_normalised, "group {0} merged local normalisation".format(index), "spectrogram_group{0}_merged_normalised.png".format(index))
 
 
 if __name__ == "__main__":
     queue = JobQueue(8)
 
     # Load each file using a process pool
-    num_samples = SAMPLE_RATE # should be 1 second
+    num_samples = 10240 #SAMPLE_RATE # should be 1 second
     queue.submit(LBAPlotter("../data/v255ae_At_072_060000.lba", "./At_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples=num_samples))
