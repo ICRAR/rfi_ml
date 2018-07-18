@@ -368,7 +368,7 @@ if __name__ == "__main__":
     queue = JobQueue(8)
 
     # Load each file using a process pool
-    num_samples = 10240 #SAMPLE_RATE # should be 1 second
+    num_samples = 0 #SAMPLE_RATE # should be 1 second
     queue.submit(LBAPlotter("../data/v255ae_At_072_060000.lba", "./At_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples=num_samples))
