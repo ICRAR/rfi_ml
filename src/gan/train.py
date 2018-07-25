@@ -35,7 +35,7 @@ LOG = logging.getLogger(__name__)
 SAMPLE_SIZE = 1024  # 1024 samples to train on
 
 
-def train(max_epochs):
+def train(max_epochs, use_cuda=True):
     # Ensure the checkpoint directories exist
     Checkpoint.create_directory("discriminator")
     Checkpoint.create_directory("generator")
@@ -44,6 +44,14 @@ def train(max_epochs):
     plots = Plots(2)
     discriminator = Discriminator(1024, fft_size)
     generator = Generator(1024)
+
+    if use_cuda:
+        discriminator = nn.DataParallel(discriminator.cuda())
+        generator = nn.DataParallel(generator.cuda())
+        LOG.info("Using CUDA")
+    else:
+        LOG.info("Using CPU")
+
     criterion = nn.BCELoss()
     discriminator_optimiser = optim.Adam(discriminator.parameters(), lr=0.0003)
     generator_optimiser = optim.Adam(generator.parameters(), lr=0.0003)
@@ -58,28 +66,36 @@ def train(max_epochs):
     elif discriminator_epoch is not None:
         epoch = discriminator_epoch
 
+    # Load real noise data from file
+    # Generate fake noise data using gaussian noise
+
     # Training loop
     while epoch < max_epochs:
         for step, (noise, fake1, fake2) in enumerate(zip(noise_data, fake_noise_data1, fake_noise_data2)):
 
             # ============= Train the discriminator =============
+            # Pass real noise through first - ideally the discriminator will return [1, 0]
             d_output_real = discriminator(noise)
-            d_loss_real = criterion(d_output_real, real_labels)
-
+            # Pass fake noise through - ideally the discriminator will return [0, 1]
             g_output_fake1 = generator(fake1)
             d_output_fake1 = discriminator(g_output_fake1)
-            d_loss_fake = criterion(d_output_fake1, fake_labels)
 
+            # Determine the loss of the discriminator by adding up the real and fake loss and backpropagate
+            d_loss_real = criterion(d_output_real, real_labels)  # How good the discriminator is on real input
+            d_loss_fake = criterion(d_output_fake1, fake_labels)  # How good the discriminator is on fake input
             d_loss = d_loss_real + d_loss_fake
             discriminator.zero_grad()
             d_loss.backward()
             discriminator_optimiser.step()
 
             # =============== Train the generator ===============
+            # Pass in fake noise to the generator and get it to generate "real" noise
             g_output_fake2 = generator(fake2)
+            # Judge how good this noise is with the discriminator
             d_output_fake2 = discriminator(g_output_fake2)
-            g_loss = criterion(d_output_fake2, real_labels)
 
+            # Determine the loss of the generator using the discriminator and backpropagate
+            g_loss = criterion(d_output_fake2, real_labels)
             discriminator.zero_grad()
             generator.zero_grad()
             g_loss.backward()

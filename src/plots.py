@@ -28,6 +28,7 @@ Methods to generate a variety of plots from lba files
 import cupy as cp
 from scipy import signal
 import numpy as np
+import logging
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -43,7 +44,6 @@ SAMPLE_RATE = 32000000
 # Each frequency channel is 16MHz wide (stacked upward from 6.7GHz)
 # X = samples, Y = frequency band 0 to 4, Z = P0 or P1
 # mlgpu, 14000M
-
 
 class LBAPlotter(object):
     # Frequency range for each channel within a polarisation
@@ -277,89 +277,121 @@ class LBAPlotter(object):
         plt.close(fig)
 
     def __call__(self):
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+        self.LOG = logging.getLogger(__name__)
+
+        self.LOG.info("Plotter for {0} started".format(self.filename))
         matplotlib.rc('font', weight='normal', size=18)
 
         # Firstly, create the output directory
         os.makedirs(self.out_directory, exist_ok=True)
+        self.LOG.info("Output directory {0} created".format(self.out_directory))
 
         if self.filename.endswith(".lba"):
             with open(self.filename, "r") as f:
+                self.LOG.info("Opening LBA file {0} and reading samples...".format(self.filename))
                 lba = LBAFile(f)
                 samples = lba.read(self.sample_offset, self.num_samples)
         elif self.filename.endswith(".npz"):
             samples = np.load(self.filename)["arr_0"]
 
+        self.LOG.info("Read {0} samples".format(self.num_samples))
+
         # Do global things across all samples
+        self.LOG.info("Calculating sample statistics for entire dataset...")
         self.output_sample_statistics(samples)
 
         # Iterate over each of the two polarisations
         for pindex in range(samples.shape[2]):
+            self.LOG.info("{0} Polarisation {1}".format(self.filename, pindex))
             p = samples[:, :, pindex]
 
             self.polarisation = pindex
             os.makedirs(self.get_output_filename(), exist_ok=True)
+            self.LOG.info("{0}, P{1} Sample statistics...".format(self.filename, pindex))
             self.output_sample_statistics(p)
 
             spectrogram_groups = [[], []]  # freq1, freq2 : freq3, freq4
             # Iterate over each of the four frequencies
             for freq in range(p.shape[1]):
+                self.LOG.info("{0}, P{1} Frequency {2}".format(self.filename, pindex, freq))
                 freq_samples = p[:, freq]
 
                 self.frequency = freq
                 os.makedirs(self.get_output_filename(), exist_ok=True)
+                self.LOG.info("{0}, P{1}, F{2} Sample statistics...".format(self.filename, pindex, freq))
                 self.output_sample_statistics(freq_samples)
 
                 # Spectrogram for this frequency
+                self.LOG.info("{0}, P{1}, F{2} Spectrogram".format(self.filename, pindex, freq))
                 f, t, sxx = self.create_spectrogram(freq_samples)
                 # Calculate the actual frequencies for the spectrogram
                 self.fix_freq(f, freq)
                 spectrogram = (f, t, sxx)
                 spectrogram_groups[freq // 2].append(spectrogram)
+                self.LOG.info("{0}, P{1}, F{2} Spectrogram Saving".format(self.filename, pindex, freq))
                 self.save_spectrogram(spectrogram)
 
                 # Periodogram for this frequency
+                self.LOG.info("{0}, P{1}, F{2} Periodogram".format(self.filename, pindex, freq))
                 f, pxx = self.create_periodogram(freq_samples)
                 self.fix_freq(f, freq)
+                self.LOG.info("{0}, P{1}, F{2} Periodogram Saving".format(self.filename, pindex, freq))
                 self.save_periodogram((f, pxx))
 
                 # Welch
+                self.LOG.info("{0}, P{1}, F{2} Welch".format(self.filename, pindex, freq))
                 f, spec = self.create_welch(freq_samples)
                 self.fix_freq(f, freq)
+                self.LOG.info("{0}, P{1}, F{2} Welch Saving".format(self.filename, pindex, freq))
                 self.save_welch((f, spec))
 
                 # Lombscargle
                 try:
+                    self.LOG.info("{0}, P{1}, F{2} Lombscargle".format(self.filename, pindex, freq))
                     f, pxx = self.create_lombscargle(freq_samples)
                     self.fix_freq(f, freq)
+                    self.LOG.info("{0}, P{1}, F{2} Lombscargle Saving".format(self.filename, pindex, freq))
                     self.save_lombscargle((f, pxx))
                 except ZeroDivisionError:
                     print("Zero division in Lombscargle")
 
                 # RFFT
+                self.LOG.info("{0}, P{1}, F{2} RFFT".format(self.filename, pindex, freq))
                 f, ft = self.create_rfft(freq_samples)
                 self.fix_freq(f, freq)
+                self.LOG.info("{0}, P{1}, F{2} RFFT Saving".format(self.filename, pindex, freq))
                 self.save_rfft((f, ft))
 
                 # IFFT
+                self.LOG.info("{0}, P{1}, F{2} IRFFT".format(self.filename, pindex, freq))
                 f, ft = self.create_ifft(freq_samples)
                 self.fix_freq(f, freq)
+                self.LOG.info("{0}, P{1}, F{2} IRFFT Saving".format(self.filename, pindex, freq))
                 self.save_ifft((f, ft))
 
                 # power spectral density
+                self.LOG.info("{0}, P{1}, F{2} PSD".format(self.filename, pindex, freq))
                 Pxx, f = self.create_psd(freq_samples)
                 self.fix_freq(f, freq)
+                self.LOG.info("{0}, P{1}, F{2} PSD Saving".format(self.filename, pindex, freq))
                 self.save_psd((Pxx, f), "Power Spectral Density", "Power Spectral Density [V/rtMHz]")
 
                 # amplitude spectral density
+                self.LOG.info("{0}, P{1}, F{2} ASD".format(self.filename, pindex, freq))
                 np.sqrt(Pxx, Pxx)
+                self.LOG.info("{0}, P{1}, F{2} ASD Saving".format(self.filename, pindex, freq))
                 self.save_psd((Pxx, f), "Amplitude Spectral Density", "Amplitude Spectral Density [sqrt(V/rtMHz)]")
 
             self.frequency = None
 
             # Create merged spectrograms for this p
+            self.LOG.info("{0}, P{1} Merged Spectrograms...".format(self.filename, pindex))
             for index, group in enumerate(spectrogram_groups):
+                self.LOG.info("{0}, P{1} Merged Spectrograms Group {2}".format(self.filename, pindex, index))
                 merged = self.merge_spectrograms(group)
                 merged_normalised = self.merge_spectrograms(group, normalise_local=True)
+                self.LOG.info("{0}, P{1} Merged Spectrograms Group {2} Saving".format(self.filename, pindex, index))
                 self.save_spectrogram(merged, "group {0} merged".format(index), "spectrogram_group{0}_merged.png".format(index))
                 self.save_spectrogram(merged_normalised, "group {0} merged local normalisation".format(index), "spectrogram_group{0}_merged_normalised.png".format(index))
 
@@ -368,10 +400,10 @@ if __name__ == "__main__":
     queue = JobQueue(8)
 
     # Load each file using a process pool
-    num_samples = 0 #SAMPLE_RATE # should be 1 second
+    num_samples = 0  # SAMPLE_RATE # should be 1 second
     queue.submit(LBAPlotter("../data/v255ae_At_072_060000.lba", "./At_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples=num_samples))
     queue.submit(LBAPlotter("../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples=num_samples))
-    #queue.submit(LBAPlotter("../data/downsamples.npz", "./downsamples_out/"))
+    # queue.submit(LBAPlotter("../data/downsamples.npz", "./downsamples_out/"))
 
     queue.join()
