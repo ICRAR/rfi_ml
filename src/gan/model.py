@@ -56,8 +56,8 @@ class Discriminator(nn.Module):
         # This layer will accept both the result of the signal convolution, and an FFT of the signal
         # (containing an array of real values followed by the imaginary values)
         # fft_size is the number of real + imaginary values
-        in_size = sample_size - 18 + fft_size
-        out_size = sample_size + fft_size
+        in_size = 10 * (sample_size - 18)
+        out_size = sample_size
         self.linear = nn.Sequential(
             nn.Linear(in_size, out_size),
             # Considering this is also taking the fft, it may need to be made wider / deeper
@@ -69,7 +69,7 @@ class Discriminator(nn.Module):
             nn.Softmax(dim=1),
         )
 
-    def forward(self, x, fft):
+    def forward(self, x):
         """
         :param x:
         :param fft: fftr + ffti flattened.
@@ -78,7 +78,7 @@ class Discriminator(nn.Module):
         x = x.view(x.size(0), 1, -1)
         x = self.convolution(x)
         x = x.view(x.size(0), -1)
-        x = torch.cat((x, fft), dim=1)
+        #x = torch.cat((x, fft), dim=1)
         x = self.linear(x)
         return x
 
@@ -122,8 +122,8 @@ class Generator(nn.Module):
         )
 
         # Linear maps from in to hidden to out (which is same size as in)
-        size_in = sample_size // 32
-        size_hidden = sample_size // 4
+        size_in = 10 * (sample_size // 32 - 8)
+        size_hidden = 10 * (sample_size // 4)
         size_out = size_in
         self.linear = nn.Sequential(
             nn.Linear(size_in, size_hidden),
@@ -144,22 +144,27 @@ class Generator(nn.Module):
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
+            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
+            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
+            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
+            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 5, 5),
             nn.ELU(),
+            nn.MaxUnpool1d(2, 2),
             nn.Dropout(p=0.2),
             nn.BatchNorm1d(5),
 
@@ -169,6 +174,7 @@ class Generator(nn.Module):
         )
 
     def forward(self, x):
+        x = x.view(x.size(0), 1, -1)
         x = self.encoder(x)
         x = x.view(x.size(0), -1)
         x = self.linear(x)

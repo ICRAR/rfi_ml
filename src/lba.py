@@ -49,6 +49,27 @@ class LBAFile(object):
         self.header = self._read_header()
         self.size = os.fstat(f.fileno()).st_size
 
+    @property
+    def bytes_per_sample(self):
+        num_chan = int(self.header["NCHAN"])
+        num_bits = int(self.header["NUMBITS"])
+        bandwidth = int(float(self.header["BANDWIDTH"]))
+
+        # Each sample contains num_chan channels, the reading for each channel is num_bits
+        # bandwidth >> 4 converts a bandwidth value into a byte value
+        # e.g. 64 bandwidth = 4, 32 bandwidth = 2, 16 bandwidth = 1
+        # final divide by 8 converts from bits to bytes
+        return num_chan * num_bits * (bandwidth >> 4) // 8
+
+    @property
+    def max_samples(self):
+        data_size = self.size - int(self.header["HEADERSIZE"])
+        max_samples = data_size // self.bytes_per_sample
+        # Skip over this number of samples, because every 32 million samples there is
+        # a 65535 marker which is meaningless
+        max_samples -= max_samples // 32000000
+        return max_samples
+
     def _read_header(self):
         """
         Reads in an LBA header and stores it in self.header
@@ -95,10 +116,8 @@ class LBAFile(object):
         if samples < 0:
             raise Exception("Negative samples requested")
 
-        bandwidth = int(float(self.header["BANDWIDTH"]))
         num_chan = int(self.header["NCHAN"])
         num_bits = int(self.header["NUMBITS"])
-        data_size = self.size - int(self.header["HEADERSIZE"])
         data_start = int(self.header["HEADERSIZE"])
         # Richard orginally gave this map [3, -3, 1, -1], but it seems to be wrong as
         # I don't get the correct spread of output values (about 2x the number of 1s as there are 3s)
@@ -110,28 +129,26 @@ class LBAFile(object):
         num_freq = num_chan // 2
         num_freq_bits = num_bits * 2
 
-        # Each sample contains num_chan channels, the reading for each channel is num_bits
-        # bandwidth >> 4 converts a bandwidth value into a byte value
-        # e.g. 64 bandwidth = 4, 32 bandwidth = 2, 16 bandwidth = 1
-        # final divide by 8 converts from bits to bytes
-        bytes_per_sample = num_chan * num_bits * (bandwidth >> 4) // 8
+        # Calculate number of bytes per sample
+        bytes_per_sample = self.bytes_per_sample
 
-        # Confirm that the user requested a sane amount of data.
-        max_samples = data_size // bytes_per_sample
-        # Skip over this number of samples, because every 32 million samples there is
-        # a 65535 marker which is meaningless
-        max_samples -= max_samples // 32000000
+        # Max samples that can be requested from the file
+        max_samples = self.max_samples
         if samples == 0:
             samples = max_samples
         elif samples > max_samples:
             raise Exception("{0} samples requested with {1} max samples".format(samples, max_samples))
 
         # Confirm that the user requested a sane offset
+        if offset > max_samples:
+            raise Exception("Offset {0} > Maxsamples {1}".format(offset, max_samples))
+        elif offset < 0:
+            raise Exception("Offset {0} < 0".format(offset))
+
+        if offset + samples > max_samples:
+            raise Exception("Offset {0}, samples {1} will overflow lba file".format(offset, samples))
+
         sample_offset = offset * bytes_per_sample
-        if sample_offset > max_samples:
-            raise Exception("Offset {0} > Maxsamples {1}".format(sample_offset, max_samples))
-        elif sample_offset < 0:
-            raise Exception("Offset {0} < 0".format(sample_offset))
 
         # This will result in a mask for the number of bits in each frequency
         # e.g. for 4 bits per frequency, this will have the low 4 bits set

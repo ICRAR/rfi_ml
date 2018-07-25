@@ -29,6 +29,7 @@ class Plots(object):
 
     def generate(self, real_noise, fake_noise, input_noise, epoch):
         # Add to queue to generate and save in another process
-        self.queue.submit(Plotter(real_noise, epoch))
-        self.queue.submit(Plotter(fake_noise, epoch))
-        self.queue.submit(Plotter(input_noise, epoch))
+        pass
+        #self.queue.submit(Plotter(real_noise, epoch))
+        #self.queue.submit(Plotter(fake_noise, epoch))
+        #self.queue.submit(Plotter(input_noise, epoch))

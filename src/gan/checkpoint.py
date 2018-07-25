@@ -27,14 +27,11 @@ import datetime
 
 
 class Checkpoint(object):
-    CHECKPOINTS_DIRECTORY = "checkpoints"
-    CHECKPOINT_PREFIX = "gan_checkpoint_"
-    DISCRIMINATOR_DIRECTORY = os.path.join(CHECKPOINTS_DIRECTORY, "discriminator")
-    GENERATOR_DIRECTORY = os.path.join(CHECKPOINTS_DIRECTORY, "generator")
+    CHECKPOINT_PREFIX = "checkpoint_"
 
     @classmethod
     def get_directory(cls, model_type):
-        return "{0}{1} {2}".format(cls.CHECKPOINT_PREFIX, model_type, datetime.datetime.now())
+        return "{0}{1}".format(cls.CHECKPOINT_PREFIX, model_type)
 
     @classmethod
     def create_directory(cls, model_type):
@@ -42,14 +39,15 @@ class Checkpoint(object):
 
     @classmethod
     def try_restore(cls, checkpoint_folder, model, optimiser):
-        files = [f for f in os.listdir(checkpoint_folder) if f.startswith(cls.CHECKPOINT_PREFIX)]
+        files = [f for f in os.listdir(cls.get_directory(checkpoint_folder)) if f.startswith(cls.CHECKPOINT_PREFIX)]
         if len(files) == 0:
             return None
         return Checkpoint.load(max(files, key=lambda f: os.path.getmtime(f))).restore(model, optimiser)
 
     @classmethod
     def save_state(cls, model_type, model_state, optimiser_state, epoch):
-        Checkpoint(model_state, optimiser_state, epoch).save(cls.get_directory(model_type))
+        filename = os.path.join(cls.get_directory(model_type), "model_save_{0}".format(datetime.datetime.now()))
+        Checkpoint(model_state, optimiser_state, epoch).save(filename)
 
     @staticmethod
     def load(f):

@@ -25,25 +25,35 @@ import os
 import logging
 import datetime
 from torch import nn, optim
+from torch.utils.data import DataLoader
 from gan.model import Discriminator, Generator
 from gan.checkpoint import Checkpoint
 from gan.plots import Plots
+from gan.data import generate_fake_noise, load_real_noise, generate_labels
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 SAMPLE_SIZE = 1024  # 1024 samples to train on
-
+TRAINING_BATCH_SIZE = 128
 
 def train(max_epochs, use_cuda=True):
+
+    def get_discriminator_args(data):
+        return data[:, 0:SAMPLE_SIZE], data[:, SAMPLE_SIZE:]
+
+    def get_generator_args(data):
+        return data[:, 0:SAMPLE_SIZE]
+
     # Ensure the checkpoint directories exist
     Checkpoint.create_directory("discriminator")
     Checkpoint.create_directory("generator")
 
     # Create the objects we need for training
-    plots = Plots(2)
-    discriminator = Discriminator(1024, fft_size)
-    generator = Generator(1024)
+    plots = Plots(workers=2)
+    # fft size is sample size * 2, one for real and one for imag
+    discriminator = Discriminator(SAMPLE_SIZE, fft_size=SAMPLE_SIZE * 2)
+    generator = Generator(SAMPLE_SIZE)
 
     if use_cuda:
         discriminator = nn.DataParallel(discriminator.cuda())
@@ -66,16 +76,42 @@ def train(max_epochs, use_cuda=True):
     elif discriminator_epoch is not None:
         epoch = discriminator_epoch
 
-    # Load real noise data from file
-    # Generate fake noise data using gaussian noise
+    # Create two fake noise data sets, which are a normal distribution normalised between -1 and 1.
+    # 10000 batches containing 1024 samples per batch
+    fake_noise_data1 = DataLoader(generate_fake_noise(1000, SAMPLE_SIZE),
+                                  batch_size=TRAINING_BATCH_SIZE,
+                                  shuffle=True,
+                                  pin_memory=use_cuda,
+                                  num_workers=1)
+
+    fake_noise_data2 = DataLoader(generate_fake_noise(1000, SAMPLE_SIZE),
+                                  batch_size=TRAINING_BATCH_SIZE,
+                                  shuffle=True,
+                                  pin_memory=use_cuda,
+                                  num_workers=1)
+
+    real_noise_data = DataLoader(load_real_noise("../../data/v255ae_At_072_060000.lba", 1000, SAMPLE_SIZE),
+                                 batch_size=TRAINING_BATCH_SIZE,
+                                 shuffle=True,
+                                 pin_memory=use_cuda,
+                                 num_workers=1)
+
+    real_labels = None
+    fake_labels = None
 
     # Training loop
     while epoch < max_epochs:
-        for step, (noise, fake1, fake2) in enumerate(zip(noise_data, fake_noise_data1, fake_noise_data2)):
+        for step, (real, fake1, fake2) in enumerate(zip(real_noise_data, fake_noise_data1, fake_noise_data2)):
+
+            step_batch_size = real.size(0)
+            if real_labels is None or real_labels.size(0) != step_batch_size:
+                real_labels = generate_labels(step_batch_size, [1.0, 0.0], use_cuda=use_cuda)
+            if fake_labels is None or fake_labels.size(0) != step_batch_size:
+                fake_labels = generate_labels(step_batch_size, [0.0, 1.0], use_cuda=use_cuda)
 
             # ============= Train the discriminator =============
             # Pass real noise through first - ideally the discriminator will return [1, 0]
-            d_output_real = discriminator(noise)
+            d_output_real = discriminator(real)
             # Pass fake noise through - ideally the discriminator will return [0, 1]
             g_output_fake1 = generator(fake1)
             d_output_fake1 = discriminator(g_output_fake1)
@@ -106,8 +142,12 @@ def train(max_epochs, use_cuda=True):
                 fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
                 LOG.info(fmt.format(epoch, max_epochs, step, d_loss_real, d_loss_fake, g_loss))
 
-                plots.generate(noise, g_output_fake1, g_output_fake2, epoch)
+                plots.generate(real, g_output_fake1, g_output_fake2, epoch)
 
                 Checkpoint.save_state("discriminator", discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch)
                 Checkpoint.save_state("generator", generator.state_dict(), generator_optimiser.state_dict(), epoch)
         epoch += 1
+
+
+if __name__ == "__main__":
+    train(10, use_cuda=False)
