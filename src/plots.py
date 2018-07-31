@@ -37,6 +37,7 @@ from jobs import JobQueue
 from lba import LBAFile
 import os
 import json
+import gc
 
 SAMPLE_RATE = 32000000
 
@@ -292,6 +293,8 @@ class LBAPlotter(object):
                 self.LOG.info("Opening LBA file {0} and reading samples...".format(self.filename))
                 lba = LBAFile(f)
                 samples = lba.read(self.sample_offset, self.num_samples)
+                del lba
+                gc.collect()  # Ensure the loaded lba file is unloaded
         elif self.filename.endswith(".npz"):
             samples = np.load(self.filename)["arr_0"]
 
@@ -397,13 +400,19 @@ class LBAPlotter(object):
 
 
 if __name__ == "__main__":
-    queue = JobQueue(8)
+    #queue = JobQueue(8)
 
     # Load each file using a process pool
-    num_samples = 10240  # SAMPLE_RATE # should be 1 second
-    queue.submit(LBAPlotter("../data/v255ae_At_072_060000.lba", "./At_out/", num_samples=num_samples))
-    queue.submit(LBAPlotter("../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples=num_samples))
-    queue.submit(LBAPlotter("../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples=num_samples))
+    num_samples = 0  # SAMPLE_RATE # should be 1 second
+    LBAPlotter("../data/v255ae_At_072_060000.lba", "./At_out/", num_samples=num_samples)()
+    gc.collect()
+    LBAPlotter("../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples=num_samples)()
+    gc.collect()
+    LBAPlotter("../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples=num_samples)()
+    gc.collect()
+    #queue.submit()
+    #queue.submit()
+    #queue.submit()
     # queue.submit(LBAPlotter("../data/downsamples.npz", "./downsamples_out/"))
 
-    queue.join()
+    #queue.join()
