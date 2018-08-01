@@ -24,8 +24,11 @@
 import numpy as np
 import scipy.fftpack as fft
 import torch
+import logging
 from torch.utils.data import DataLoader
 from lba import LBAFile
+
+LOG = logging.getLogger(__name__)
 
 
 def normalise(array):
@@ -84,12 +87,39 @@ def load_real_noise(filename, num_batches, batch_size, frequency=None, polarisat
 
         # Get data for each batch
         for batch in range(num_batches):
+            if batch % 100 == 0 or batch == num_batches - 1:
+                LOG.info("Loading real data batch {0} / {1}".format(batch + 1, num_batches))
             lba_data = lba.read(indexes[batch], batch_size)
             data[batch] = lba_data[:, frequency_indexes[batch], polarisation_indexes[batch]]
 
     data = normalise(data)
 
     return data
+
+
+def get_data_loaders(num_batches, training_batch_size, sample_size, use_cuda):
+    # Create two fake noise data sets, which are a normal distribution normalised between -1 and 1.
+    LOG.info("Generating fake noise data...")
+    fake_noise_data1 = DataLoader(generate_fake_noise(training_batch_size * num_batches, sample_size),
+                                  batch_size=training_batch_size,
+                                  shuffle=True,
+                                  pin_memory=use_cuda,
+                                  num_workers=1)
+
+    fake_noise_data2 = DataLoader(generate_fake_noise(training_batch_size * num_batches, sample_size),
+                                  batch_size=training_batch_size,
+                                  shuffle=True,
+                                  pin_memory=use_cuda,
+                                  num_workers=1)
+
+    LOG.info("Loading real noise data...")
+    real_noise_data = DataLoader(load_real_noise("../../data/v255ae_At_072_060000.lba", training_batch_size * num_batches, sample_size),
+                                 batch_size=training_batch_size,
+                                 shuffle=True,
+                                 pin_memory=use_cuda,
+                                 num_workers=1)
+
+    return real_noise_data, fake_noise_data1, fake_noise_data2
 
 
 if __name__ == "__main__":

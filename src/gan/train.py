@@ -25,35 +25,27 @@ import os
 import logging
 import datetime
 from torch import nn, optim
-from torch.utils.data import DataLoader
-from gan.model import Discriminator, Generator
+from gan.model import get_models
 from gan.checkpoint import Checkpoint
 from gan.plots import Plots
-from gan.data import generate_fake_noise, load_real_noise, generate_labels
+from gan.data import get_data_loaders, generate_labels
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
-SAMPLE_SIZE = 1024  # 1024 samples to train on
+SAMPLE_SIZE = 1024  # 1024 signal samples to train on
 TRAINING_BATCH_SIZE = 128
+TRAINING_BATCHES = 32
+
 
 def train(max_epochs, use_cuda=True):
-
-    def get_discriminator_args(data):
-        return data[:, 0:SAMPLE_SIZE], data[:, SAMPLE_SIZE:]
-
-    def get_generator_args(data):
-        return data[:, 0:SAMPLE_SIZE]
-
     # Ensure the checkpoint directories exist
     Checkpoint.create_directory("discriminator")
     Checkpoint.create_directory("generator")
 
     # Create the objects we need for training
     plots = Plots(workers=2)
-    # fft size is sample size * 2, one for real and one for imag
-    discriminator = Discriminator(SAMPLE_SIZE, fft_size=SAMPLE_SIZE * 2)
-    generator = Generator(SAMPLE_SIZE)
+    discriminator, generator = get_models(SAMPLE_SIZE)
 
     if use_cuda:
         discriminator = nn.DataParallel(discriminator.cuda())
@@ -68,6 +60,7 @@ def train(max_epochs, use_cuda=True):
     epoch = 0
 
     # Try restoring previous model state if it exists
+    LOG.info("Attempting checkpoint restore...")
     discriminator_epoch = Checkpoint.try_restore("discriminator", discriminator, discriminator_optimiser)
     generator_epoch = Checkpoint.try_restore("generator", generator, generator_optimiser)
 
@@ -75,33 +68,18 @@ def train(max_epochs, use_cuda=True):
         LOG.error("Discriminator and generator checkpoints out of sync. Ignoring")
     elif discriminator_epoch is not None:
         epoch = discriminator_epoch
-
-    # Create two fake noise data sets, which are a normal distribution normalised between -1 and 1.
-    # 10000 batches containing 1024 samples per batch
-    fake_noise_data1 = DataLoader(generate_fake_noise(1000, SAMPLE_SIZE),
-                                  batch_size=TRAINING_BATCH_SIZE,
-                                  shuffle=True,
-                                  pin_memory=use_cuda,
-                                  num_workers=1)
-
-    fake_noise_data2 = DataLoader(generate_fake_noise(1000, SAMPLE_SIZE),
-                                  batch_size=TRAINING_BATCH_SIZE,
-                                  shuffle=True,
-                                  pin_memory=use_cuda,
-                                  num_workers=1)
-
-    real_noise_data = DataLoader(load_real_noise("../../data/v255ae_At_072_060000.lba", 1000, SAMPLE_SIZE),
-                                 batch_size=TRAINING_BATCH_SIZE,
-                                 shuffle=True,
-                                 pin_memory=use_cuda,
-                                 num_workers=1)
+        LOG.info("Restored checkpoint at epoch {0}".format(epoch))
 
     real_labels = None
     fake_labels = None
 
+    LOG.info("Loading data...")
+    real_noise, fake_noise1, fake_noise2 = get_data_loaders(TRAINING_BATCHES, TRAINING_BATCH_SIZE, SAMPLE_SIZE, use_cuda)
+
     # Training loop
+    LOG.info("Training start")
     while epoch < max_epochs:
-        for step, (real, fake1, fake2) in enumerate(zip(real_noise_data, fake_noise_data1, fake_noise_data2)):
+        for step, (real, fake1, fake2) in enumerate(zip(real_noise, fake_noise1, fake_noise2)):
 
             step_batch_size = real.size(0)
             if real_labels is None or real_labels.size(0) != step_batch_size:
@@ -137,17 +115,23 @@ def train(max_epochs, use_cuda=True):
             g_loss.backward()
             generator_optimiser.step()
 
-            if step % 10 == 0 and step > 0:
+            if step % 5 == 0:
                 # Report data and save checkpoint
                 fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
-                LOG.info(fmt.format(epoch, max_epochs, step, d_loss_real, d_loss_fake, g_loss))
-
+                LOG.info(fmt.format(epoch + 1, max_epochs, step, d_loss_real, d_loss_fake, g_loss))
                 plots.generate(real, g_output_fake1, g_output_fake2, epoch)
 
-                Checkpoint.save_state("discriminator", discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch)
-                Checkpoint.save_state("generator", generator.state_dict(), generator_optimiser.state_dict(), epoch)
+        Checkpoint.save_state("discriminator", discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch)
+        Checkpoint.save_state("generator", generator.state_dict(), generator_optimiser.state_dict(), epoch)
         epoch += 1
+
+    # Final save after training complete
+    LOG.info("Training complete, saving final model state")
+    Checkpoint.create_directory("discriminator_complete")
+    Checkpoint.create_directory("generator_complete")
+    Checkpoint.save_state("discriminator_complete", discriminator.state_dict(), discriminator_optimiser.state_dict(), -1)
+    Checkpoint.save_state("generator_complete", generator.state_dict(), generator_optimiser.state_dict(), -1)
 
 
 if __name__ == "__main__":
-    train(10, use_cuda=False)
+    train(50, use_cuda=True)

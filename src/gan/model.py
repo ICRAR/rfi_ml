@@ -83,6 +83,38 @@ class Discriminator(nn.Module):
         return x
 
 
+class Encoder(nn.Sequential):
+    def __init__(self, *args):
+        super(Encoder, self).__init__(*args)
+        self._unpool_data = []
+
+    def forward(self, x):
+        for module in self._modules.values():
+            size = x.size()
+            x = module(x)
+            if isinstance(module, nn.MaxPool1d):
+                self._unpool_data.append((x[1], size))
+                x = x[0]
+        return x
+
+    def get_indices(self):
+        return self._unpool_data
+
+
+class Decoder(nn.Sequential):
+    def __init__(self, *args):
+        super(Decoder, self).__init__(*args)
+
+    def forward(self, x, unpool_data):
+        for module in self._modules.values():
+            if isinstance(module, nn.MaxUnpool1d):
+                indices, size = unpool_data.pop(-1)
+                x = module(x, indices, output_size=size)
+            else:
+                x = module(x)
+        return x
+
+
 class Generator(nn.Module):
     """
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
@@ -90,31 +122,31 @@ class Generator(nn.Module):
 
     def __init__(self, sample_size):
         super(Generator, self).__init__()
-        self.encoder = nn.Sequential(
+        self.encoder = Encoder(
             nn.Conv1d(1, 5, 5),
             nn.ELU(),
             nn.BatchNorm1d(5),
-            nn.MaxPool1d(2, 2),
+            nn.MaxPool1d(2, 2, return_indices=True),
 
             nn.Conv1d(5, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2),
+            nn.MaxPool1d(2, 2, return_indices=True),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2),
+            nn.MaxPool1d(2, 2, return_indices=True),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2),
+            nn.MaxPool1d(2, 2, return_indices=True),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2),
+            nn.MaxPool1d(2, 2, return_indices=True),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
@@ -141,7 +173,7 @@ class Generator(nn.Module):
             nn.Dropout(p=0.2),
         )
 
-        self.decoder = nn.Sequential(
+        self.decoder = Decoder(
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
             nn.MaxUnpool1d(2, 2),
@@ -179,6 +211,14 @@ class Generator(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.linear(x)
         x = x.view(x.size(0), 10, -1)
-        x = self.decoder(x)
+        x = self.decoder(x, self.encoder.get_indices())
         x = x.view(x.size(0), -1)
         return x
+
+
+def get_models(sample_size):
+    # fft size is sample size * 2, one for real and one for imag
+    discriminator = Discriminator(sample_size, fft_size=sample_size * 2)
+    generator = Generator(sample_size)
+
+    return discriminator, generator

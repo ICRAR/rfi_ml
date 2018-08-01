@@ -28,10 +28,16 @@ import datetime
 
 class Checkpoint(object):
     CHECKPOINT_PREFIX = "checkpoint_"
+    MODEL_PREFIX = "model_save_"
+    NUM_CHECKPOINTS = 3
 
     @classmethod
     def get_directory(cls, model_type):
-        return "{0}{1}".format(cls.CHECKPOINT_PREFIX, model_type)
+        return os.path.abspath("./{0}{1}".format(cls.CHECKPOINT_PREFIX, model_type))
+
+    @classmethod
+    def get_checkpoint_files(cls, directory):
+        return [os.path.join(directory, f) for f in os.listdir(directory) if f.startswith(cls.MODEL_PREFIX)]
 
     @classmethod
     def create_directory(cls, model_type):
@@ -39,14 +45,19 @@ class Checkpoint(object):
 
     @classmethod
     def try_restore(cls, checkpoint_folder, model, optimiser):
-        files = [f for f in os.listdir(cls.get_directory(checkpoint_folder)) if f.startswith(cls.CHECKPOINT_PREFIX)]
+        files = cls.get_checkpoint_files(cls.get_directory(checkpoint_folder))
         if len(files) == 0:
             return None
         return Checkpoint.load(max(files, key=lambda f: os.path.getmtime(f))).restore(model, optimiser)
 
     @classmethod
     def save_state(cls, model_type, model_state, optimiser_state, epoch):
-        filename = os.path.join(cls.get_directory(model_type), "model_save_{0}".format(datetime.datetime.now()))
+        directory = cls.get_directory(model_type)
+        filename = os.path.join(directory, "{0}{1}".format(cls.MODEL_PREFIX, datetime.datetime.now()))
+        # Remove all old checkpoints. Keep the latest NUM_CHECKPOINTS
+        for file in cls.get_checkpoint_files(directory):
+            os.remove(file)
+
         Checkpoint(model_state, optimiser_state, epoch).save(filename)
 
     @staticmethod
@@ -88,8 +99,8 @@ class Checkpoint(object):
         :param optimiser: The optimiser to restore
         :return: The restored epoch
         """
-        if self.module_state is not None:
+        if self.module_state is not None and module is not None:
             module.load_state_dict(self.module_state)
-        if self.optimiser_state is not None:
+        if self.optimiser_state is not None and optimiser is not None:
             optimiser.load_state_dict(self.optimiser_state)
         return self.epoch
