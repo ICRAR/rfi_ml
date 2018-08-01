@@ -113,7 +113,7 @@ def get_data_loaders(num_batches, training_batch_size, sample_size, use_cuda):
                                   num_workers=1)
 
     LOG.info("Loading real noise data...")
-    real_noise_data = DataLoader(load_real_noise("../../data/v255ae_At_072_060000.lba", training_batch_size * num_batches, sample_size),
+    real_noise_data = DataLoader(load_real_noise("../data/v255ae_At_072_060000.lba", training_batch_size * num_batches, sample_size),
                                  batch_size=training_batch_size,
                                  shuffle=True,
                                  pin_memory=use_cuda,
