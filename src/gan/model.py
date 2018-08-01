@@ -28,15 +28,24 @@ After the convolution step in the discriminator, pass in the fft values as two a
 Discriminator: Determines if the provided input is actually RFI. (signal -> 1, 0 or 0, 1)
 Generator: Generates RFI by taking gaussian noise and producing RFI. (gaussian noise -> signal)
 """
-import torch
 from torch import nn
+from collections import namedtuple
+
+InputDetails = namedtuple('InputDetails', 'size_in size_out')
 
 
 class Discriminator(nn.Module):
     """
     Determines whether the provided input is actually RFI noise
     """
-    def __init__(self, sample_size, fft_size):
+
+    INPUT_DETAILS = {
+        256: InputDetails(238, 0),
+        512: InputDetails(494, 0),
+        1024: InputDetails(1006, 0)
+    }
+
+    def __init__(self, sample_size):
         super(Discriminator, self).__init__()
         # Convolution part to analyse the signal itself (signal normalised from -3 to 3 into -1 to 1
         self.convolution = nn.Sequential(
@@ -52,66 +61,26 @@ class Discriminator(nn.Module):
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
         )
-        # Linear layer to make the decision.
-        # This layer will accept both the result of the signal convolution, and an FFT of the signal
-        # (containing an array of real values followed by the imaginary values)
-        # fft_size is the number of real + imaginary values
-        in_size = 10 * (sample_size - 18)
-        out_size = sample_size
+        in_size = 10 * self.INPUT_DETAILS[sample_size].size_in
         self.linear = nn.Sequential(
-            nn.Linear(in_size, out_size),
-            # Considering this is also taking the fft, it may need to be made wider / deeper
+            nn.Linear(in_size, sample_size),
             nn.ELU(alpha=0.3),
             nn.Dropout(p=0.4),
-            nn.Linear(out_size, out_size // 4),
+            nn.Linear(sample_size, sample_size // 4),
             nn.ELU(alpha=0.3),
-            nn.Linear(out_size // 4, 2),
+            nn.Linear(sample_size // 4, 2),
             nn.Softmax(dim=1),
         )
 
     def forward(self, x):
         """
         :param x:
-        :param fft: fftr + ffti flattened.
         :return:
         """
         x = x.view(x.size(0), 1, -1)
         x = self.convolution(x)
         x = x.view(x.size(0), -1)
-        #x = torch.cat((x, fft), dim=1)
         x = self.linear(x)
-        return x
-
-
-class Encoder(nn.Sequential):
-    def __init__(self, *args):
-        super(Encoder, self).__init__(*args)
-        self._unpool_data = []
-
-    def forward(self, x):
-        for module in self._modules.values():
-            size = x.size()
-            x = module(x)
-            if isinstance(module, nn.MaxPool1d):
-                self._unpool_data.append((x[1], size))
-                x = x[0]
-        return x
-
-    def get_indices(self):
-        return self._unpool_data
-
-
-class Decoder(nn.Sequential):
-    def __init__(self, *args):
-        super(Decoder, self).__init__(*args)
-
-    def forward(self, x, unpool_data):
-        for module in self._modules.values():
-            if isinstance(module, nn.MaxUnpool1d):
-                indices, size = unpool_data.pop(-1)
-                x = module(x, indices, output_size=size)
-            else:
-                x = module(x)
         return x
 
 
@@ -120,43 +89,49 @@ class Generator(nn.Module):
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
     """
 
+    INPUT_DETAILS = {
+        256: InputDetails(232, 0),
+        512: InputDetails(488, 0),
+        1024: InputDetails(24, 1000)
+    }
+
     def __init__(self, sample_size):
         super(Generator, self).__init__()
-        self.encoder = Encoder(
+        self.encoder = nn.Sequential(
             nn.Conv1d(1, 5, 5),
             nn.ELU(),
             nn.BatchNorm1d(5),
-            nn.MaxPool1d(2, 2, return_indices=True),
+            nn.MaxPool1d(2, 2),
 
             nn.Conv1d(5, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2, return_indices=True),
+            nn.MaxPool1d(2, 2),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2, return_indices=True),
+            nn.MaxPool1d(2, 2),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2, return_indices=True),
+            nn.MaxPool1d(2, 2),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.BatchNorm1d(10),
-            nn.MaxPool1d(2, 2, return_indices=True),
+            nn.MaxPool1d(2, 2),
 
             nn.Conv1d(10, 10, 5),
             nn.ELU(),
             nn.Dropout(p=0.4),
         )
 
-        # Linear maps from in to hidden to out (which is same size as in)
-        size_in = 10 * (sample_size // 32 - 8)
+        size_in = 10 * self.INPUT_DETAILS[sample_size].size_in
         size_hidden = 10 * (sample_size // 4)
-        size_out = size_in
+        size_out = 10 * self.INPUT_DETAILS[sample_size].size_out
+
         self.linear = nn.Sequential(
             nn.Linear(size_in, size_hidden),
             nn.ELU(),
@@ -173,30 +148,25 @@ class Generator(nn.Module):
             nn.Dropout(p=0.2),
         )
 
-        self.decoder = Decoder(
+        self.decoder = nn.Sequential(
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
-            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
-            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
-            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 10, 5),
             nn.ELU(),
-            nn.MaxUnpool1d(2, 2),
             nn.BatchNorm1d(10),
 
             nn.ConvTranspose1d(10, 5, 5),
             nn.ELU(),
-            nn.MaxUnpool1d(2, 2),
             nn.Dropout(p=0.2),
             nn.BatchNorm1d(5),
 
@@ -211,14 +181,13 @@ class Generator(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.linear(x)
         x = x.view(x.size(0), 10, -1)
-        x = self.decoder(x, self.encoder.get_indices())
+        x = self.decoder(x)
         x = x.view(x.size(0), -1)
         return x
 
 
 def get_models(sample_size):
-    # fft size is sample size * 2, one for real and one for imag
-    discriminator = Discriminator(sample_size, fft_size=sample_size * 2)
+    discriminator = Discriminator(sample_size)
     generator = Generator(sample_size)
 
     return discriminator, generator

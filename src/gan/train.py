@@ -21,7 +21,11 @@
 #    MA 02111-1307  USA
 #
 
+import sys
 import os
+base_path = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
+
 import logging
 import datetime
 from torch import nn, optim
@@ -35,7 +39,7 @@ LOG = logging.getLogger(__name__)
 
 SAMPLE_SIZE = 1024  # 1024 signal samples to train on
 TRAINING_BATCH_SIZE = 128
-TRAINING_BATCHES = 32
+TRAINING_BATCHES = 4
 
 
 def train(max_epochs, use_cuda=True):
