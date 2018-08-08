@@ -84,6 +84,52 @@ class Discriminator(nn.Module):
         return x
 
 
+class DiscriminatorFFT(nn.Module):
+    """
+    Determines if the provided FFT of a signal is from RFI
+    """
+
+    INPUT_DETAILS = {
+        1024: InputDetails(2048, 0)
+    }
+
+    def __init__(self, sample_size):
+        super(DiscriminatorFFT, self).__init__()
+        in_size = self.INPUT_DETAILS[sample_size].size_in
+        self.linear = nn.Sequential(
+            nn.Linear(in_size, in_size // 2),
+            nn.BatchNorm1d(in_size // 2),
+            nn.ELU(alpha=0.3),
+            nn.Dropout(p=0.4),
+
+            nn.Linear(in_size // 2, in_size // 4),
+            nn.BatchNorm1d(in_size // 4),
+            nn.ELU(alpha=0.3),
+            nn.Dropout(p=0.4),
+
+            nn.Linear(in_size // 4, in_size // 8),
+            nn.BatchNorm1d(in_size // 8),
+            nn.ELU(alpha=0.3),
+            nn.Dropout(p=0.4),
+
+            nn.Linear(in_size // 8, in_size // 16),
+            nn.BatchNorm1d(in_size // 16),
+            nn.ELU(alpha=0.3),
+            nn.Dropout(p=0.4),
+
+            nn.Linear(in_size // 16, in_size // 32),
+            nn.BatchNorm1d(in_size // 32),
+            nn.ELU(alpha=0.3),
+            nn.Dropout(p=0.4),
+
+            nn.Linear(in_size // 32, 2),
+            nn.Softmax(dim=1)
+        )
+
+    def forward(self, x):
+        return self.linear(x)
+
+
 class Generator(nn.Module):
     """
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
@@ -187,7 +233,7 @@ class Generator(nn.Module):
 
 
 def get_models(sample_size):
-    discriminator = Discriminator(sample_size)
+    discriminator = DiscriminatorFFT(sample_size)
     generator = Generator(sample_size)
 
     return discriminator, generator

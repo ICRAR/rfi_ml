@@ -21,10 +21,35 @@
 #    MA 02111-1307  USA
 #
 from gan.data import get_data_loaders
+from gan.data_fft import get_data_loaders_fft
 from gan.model import get_models
 from gan.checkpoint import Checkpoint
 
 SAMPLE_SIZE = 1024
+
+
+class TestFFT(object):
+    def __init__(self):
+        self.real, self.fake, _ = get_data_loaders_fft("test.hdf5", 1, 5, use_cuda=True)
+        self.train_real, self.train_fake, _ = get_data_loaders_fft("train.hdf5", 1, 5, use_cuda=True)
+
+    def _print_results(self, discriminator, real, fake, tag):
+        fake_noise_outputs = map(lambda x: discriminator(x), fake)
+        real_noise_outputs = map(lambda x: discriminator(x), real)
+
+        print("{0} Expected fake: 0, 1".format(tag))
+        for index, category in enumerate(fake_noise_outputs):
+            print("Fake Noise {0}: {1}".format(index, category))
+
+        print("\n{0} Expected real: 1, 0".format(tag))
+        for index, category in enumerate(real_noise_outputs):
+            print("Real Noise {0}: {1}".format(index, category))
+
+    def __call__(self, discriminator):
+        discriminator.eval()
+        self._print_results(discriminator, self.real, self.fake, "Test")
+        self._print_results(discriminator, self.train_real, self.train_fake, "Train")
+        discriminator.train()
 
 
 def test(use_cuda=True):

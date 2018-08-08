@@ -137,5 +137,3 @@ if __name__ == "__main__":
     samples = real[0, 0:SAMPLE_SIZE]
     reals = real[0, SAMPLE_SIZE:SAMPLE_SIZE * 2]
     imags = real[0, SAMPLE_SIZE * 2:]
-
-    pass
