@@ -7,4 +7,4 @@
 #SBATCH --partition=pleiades
 #SBATCH --mem=128000M
 
-/home/sfoster/env/bin/python /home/sfoster/rfi_ml/src/find_rfi.py /home/sfoster/rfi_ml/data/v255ae_At_072_060000.lba found_peak 262144
+/home/sfoster/env/bin/python /home/sfoster/rfi_ml/src/find_rfi.py /home/sfoster/rfi_ml/data/v255ae_At_072_060000.lba found_peak_at 262144
