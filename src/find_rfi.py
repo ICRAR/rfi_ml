@@ -31,7 +31,6 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-from scipy import signal
 from lba import LBAFile
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
@@ -39,7 +38,7 @@ LOG = logging.getLogger(__name__)
 
 
 def plot_peaks(fft, peaks, filename):
-    fig = plt.figure(figsize=(16, 9), dpi=160)
+    fig = plt.figure(figsize=(16, 9), dpi=80)
     plt.plot(fft)
     plt.plot(peaks, fft[peaks], 'x')
     plt.savefig(filename)
@@ -51,7 +50,6 @@ def search_rfi(filename, out_filename, sample_window):
     with open(filename, 'r') as f:
         lba = LBAFile(f)
         read_index = 0
-        #peak_widths = np.arange(2000, 3000)
 
         while read_index < lba.max_samples:
             samples = lba.read(read_index, min(sample_window, lba.max_samples - read_index))
@@ -62,7 +60,7 @@ def search_rfi(filename, out_filename, sample_window):
                     fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
                     indexes = np.argwhere(fft > np.mean(fft) + np.std(fft) * 6)
 
-                    if indexes.shape[0] > 0:
+                    if indexes.shape[0] > 2:
                         # Found peaks, plot them
                         location = "p{0} f{1} s{2}".format(pindex, findex, read_index)
                         LOG.info("Found peak: {0}".format(location))
