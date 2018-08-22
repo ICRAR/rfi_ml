@@ -46,10 +46,10 @@ def plot_peaks(fft, peaks, filename):
     plt.close(fig)
 
 
-def search_rfi(filename, out_filename, sample_window):
+def search_rfi(filename, out_filename, sample_window, start_sample):
     with open(filename, 'r') as f:
         lba = LBAFile(f)
-        read_index = 0
+        read_index = start_sample
 
         while read_index < lba.max_samples:
             samples = lba.read(read_index, min(sample_window, lba.max_samples - read_index))
@@ -74,12 +74,13 @@ def parse_args():
     parser.add_argument('lba_file', type=str, help="LBA file to search")
     parser.add_argument('out_file', type=str, help="File to output potential found RFI sources")
     parser.add_argument('sample_window', type=int, help="Number of samples per window")
+    parser.add_argument('start_sample', type=int, default=0, help="Sample to start searching at")
     return vars(parser.parse_args())
 
 
 def main():
     args = parse_args()
-    search_rfi(args['lba_file'], args['out_file'], args['sample_window'])
+    search_rfi(args['lba_file'], args['out_file'], args['sample_window'], args['start_sample'])
 
 
 if __name__ == "__main__":
