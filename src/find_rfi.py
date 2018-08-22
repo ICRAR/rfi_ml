@@ -32,9 +32,12 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from lba import LBAFile
+from scipy import signal
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
+
+SAMPLE_RATE = 32000000
 
 
 def plot_peaks(fft, peaks, filename):
@@ -57,10 +60,15 @@ def search_rfi(filename, out_filename, sample_window, start_sample):
 
             for pindex in range(samples.shape[2]):
                 for findex in range(samples.shape[1]):
-                    fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
+                    # fft = (np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10] ** 2) / sample_window
+                    ft, fft = signal.welch(samples[:, findex, pindex], SAMPLE_RATE)
+                    ft = ft[10:-10]
+                    fft = fft[10:-10]
+
+                    # fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
                     indexes = np.argwhere(fft > np.mean(fft) + np.std(fft) * 6)
 
-                    if indexes.shape[0] > 2:
+                    if indexes.shape[0] > 2 or read_index == 0:
                         # Found peaks, plot them
                         location = "p{0} f{1} s{2}".format(pindex, findex, read_index)
                         LOG.info("Found peak: {0}".format(location))
