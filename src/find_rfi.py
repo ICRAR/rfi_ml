@@ -32,12 +32,36 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from lba import LBAFile
-from scipy import signal
+from scipy import signal, stats, fftpack
+
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 SAMPLE_RATE = 32000000
+
+
+def rfi_mean_stddev(samples, findex, pindex, read_index, out_filename):
+    # fft = (np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10] ** 2) / sample_window
+    ft, fft = signal.welch(samples[:, findex, pindex], SAMPLE_RATE)
+    ft = ft[10:-10]
+    fft = fft[10:-10]
+
+    # fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
+    indexes = np.argwhere(fft > np.mean(fft) + np.std(fft) * 6)
+
+    if indexes.shape[0] > 2 or read_index == 0:
+        # Found peaks, plot them
+        location = "p{0} f{1} s{2}".format(pindex, findex, read_index)
+        LOG.info("Found peak: {0}".format(location))
+        plot_peaks(fft, indexes, "{0}_{1}.png".format(out_filename, location))
+
+
+def rfi_kurtosis(samples, findex, pindex, read_index, out_filename):
+    f, t, Zxx = signal.stft(samples[:, findex, pindex], fs=SAMPLE_RATE)
+    k = stats.kurtosis(np.abs(Zxx))
+    m = np.mean(np.abs(Zxx))
+    print("Kurtosis of {0} f{1} p{2}: {3}, mean: {4}".format(read_index, findex, pindex, k, m))
 
 
 def plot_peaks(fft, peaks, filename):
@@ -60,19 +84,8 @@ def search_rfi(filename, out_filename, sample_window, start_sample):
 
             for pindex in range(samples.shape[2]):
                 for findex in range(samples.shape[1]):
-                    # fft = (np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10] ** 2) / sample_window
-                    ft, fft = signal.welch(samples[:, findex, pindex], SAMPLE_RATE)
-                    ft = ft[10:-10]
-                    fft = fft[10:-10]
-
-                    # fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
-                    indexes = np.argwhere(fft > np.mean(fft) + np.std(fft) * 6)
-
-                    if indexes.shape[0] > 2 or read_index == 0:
-                        # Found peaks, plot them
-                        location = "p{0} f{1} s{2}".format(pindex, findex, read_index)
-                        LOG.info("Found peak: {0}".format(location))
-                        plot_peaks(fft, indexes, "{0}_{1}.png".format(out_filename, location))
+                    #rfi_mean_stddev(samples, findex, pindex, read_index, out_filename)
+                    rfi_kurtosis(samples, findex, pindex, read_index, out_filename)
 
             read_index += sample_window
 
