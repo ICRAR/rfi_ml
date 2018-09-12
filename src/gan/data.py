@@ -26,6 +26,7 @@ import torch
 import logging
 from torch.utils.data import DataLoader, Dataset
 from lba import LBAFile
+from gan import USE_CUDA
 
 LOG = logging.getLogger(__name__)
 
@@ -66,7 +67,6 @@ class NoiseDataset(Dataset):
 
 
 class Data(object):
-    USE_CUDA = True
 
     def __init__(self, filename, samples, width, batch_size):
         self.width = width
@@ -77,7 +77,7 @@ class Data(object):
         self.noise = DataLoader(NoiseDataset(self.samples, self.width),
                                 batch_size=batch_size,
                                 shuffle=True,
-                                pin_memory=self.USE_CUDA,
+                                pin_memory=USE_CUDA,
                                 num_workers=1)
 
         # fake_noise_data2 = DataLoader(self.generate_fake_noise(self.samples, self.width),
@@ -90,7 +90,7 @@ class Data(object):
         self.data = DataLoader(self.load_data(filename, self.samples, self.width),
                                batch_size=batch_size,
                                shuffle=True,
-                               pin_memory=self.USE_CUDA,
+                               pin_memory=USE_CUDA,
                                num_workers=1)
 
     def __iter__(self):
@@ -148,4 +148,4 @@ class Data(object):
 
     def generate_labels(self, num_samples, pattern):
         var = torch.FloatTensor([pattern] * num_samples)
-        return var.cuda() if self.USE_CUDA else var
+        return var.cuda() if USE_CUDA else var

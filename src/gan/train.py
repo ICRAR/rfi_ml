@@ -28,6 +28,7 @@ sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
 import logging
 from torch import nn, optim
+from gan import USE_CUDA
 from gan.checkpoint import Checkpoint
 from gan.data import Data
 from gan.models.single_polarisation_single_frequency import Generator, Discriminator
@@ -41,7 +42,6 @@ TRAINING_BATCHES = 10000
 
 
 class Train(object):
-    USE_CUDA = True
 
     def __init__(self, samples, width, batch_size):
         # Ensure the checkpoint directories exist
@@ -52,7 +52,7 @@ class Train(object):
         self.discriminator = Discriminator(width)
         self.generator = Generator(width)
 
-        if self.USE_CUDA:
+        if USE_CUDA:
             self.discriminator = nn.DataParallel(self.discriminator.cuda())
             self.generator = nn.DataParallel(self.generator.cuda())
             LOG.info("Using CUDA")
