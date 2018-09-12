@@ -150,5 +150,5 @@ class Train(object):
 
 
 if __name__ == "__main__":
-    train = Train(1000, 2048, 256)
+    train = Train(1000, 2048, 64)
     train.train("../../data/v255ae_At_072_060000.lba", 100)

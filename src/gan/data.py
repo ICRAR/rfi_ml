@@ -149,3 +149,12 @@ class Data(object):
     def generate_labels(self, num_samples, pattern):
         var = torch.FloatTensor([pattern] * num_samples)
         return var.cuda() if USE_CUDA else var
+
+
+if __name__ == "__main__":
+    data_loader = Data("../../data/v255ae_At_072_060000.lba", 1000, 2048, 64)
+    count = 0
+    for data, noise in data_loader:
+        count += 1
+        print(data, noise)
+    print(count)
