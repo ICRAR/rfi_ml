@@ -21,6 +21,11 @@
 #    MA 02111-1307  USA
 #
 
+import sys
+import os
+base_path = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
+
 import numpy as np
 import torch
 import logging
