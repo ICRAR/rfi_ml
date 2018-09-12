@@ -22,7 +22,7 @@
 #
 from gan.data import get_data_loaders
 from gan.data_fft import get_data_loaders_fft
-from gan.model import get_models
+from gan.models.model_old import get_models
 from gan.checkpoint import Checkpoint
 
 SAMPLE_SIZE = 1024
