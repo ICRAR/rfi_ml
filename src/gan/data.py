@@ -42,7 +42,7 @@ class NoiseDataset(Dataset):
         self.width = width
 
     def __getitem__(self, item):
-        return Data.generate_fake_noise(self.samples, self.width)
+        return Data.generate_fake_noise(1, self.width)
 
     def __len__(self):
         return self.samples  # Doesn't matter as we simply re-generate the noise each time
