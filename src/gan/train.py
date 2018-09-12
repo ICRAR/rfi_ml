@@ -98,17 +98,17 @@ class Train(object):
         epoch = start_epoch
 
         LOG.info("Loading data...")
-        data = Data(filename, self.samples, self.width, self.batch_size)
+        data_loader = Data(filename, self.samples, self.width, self.batch_size)
 
         # Training loop
         LOG.info("Training start")
         while epoch < max_epochs:
-            for step, (data, noise) in enumerate(data):
+            for step, (data, noise) in enumerate(data_loader):
                 batch_size = data.size(0)
                 if real_labels is None or real_labels.size(0) != batch_size:
-                    real_labels = data.generate_labels(batch_size, [1.0, 0.0], use_cuda=self.USE_CUDA)
+                    real_labels = data_loader.generate_labels(batch_size, [1.0, 0.0])
                 if fake_labels is None or fake_labels.size(0) != batch_size:
-                    fake_labels = data.generate_labels(batch_size, [0.0, 1.0], use_cuda=self.USE_CUDA)
+                    fake_labels = data_loader.generate_labels(batch_size, [0.0, 1.0])
 
                 # ============= Train the discriminator =============
                 # Pass real noise through first - ideally the discriminator will return [1, 0]
