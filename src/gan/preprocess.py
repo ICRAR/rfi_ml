@@ -26,12 +26,11 @@ Preprocess samples from an lba file and generate training data.
 No fft version
 Extract samples from lba files and use them directly
 """
+import os
 import argparse
 import logging
 import h5py
-import numpy as np
 from lba import LBAFile
-from gan.noise import generate_fake_noise
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
@@ -41,36 +40,45 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Convert an LBA file into an easier to load format")
     parser.add_argument('lba_file', type=str, help="LBA file to convert")
     parser.add_argument('outfile', type=str, help="Output file to write to")
-    parser.add_argument('--input_size', type=int, help="Number of samples per input")
-    parser.add_argument('--num_inputs', type=int, help="Total number of inputs to create")
+    parser.add_argument('--samples', type=int, help="Number of samples to read")
+    parser.add_argument('--channel', type=int, help="Pull out a specific channel from the signal")
+    parser.add_argument('--polarisation', type=int, help='Pull out a specific polarisation from the signal')
     return vars(parser.parse_args())
 
 
 def main():
     args = parse_args()
-
-    input_size = args['input_size']
-    num_inputs = args['num_inputs']
-
     LOG.info("Starting...")
+
+    try:
+        os.remove(args['outfile'])
+    except Exception:
+        pass
 
     with open(args['lba_file'], 'r') as f:
         lba = LBAFile(f)
-        with h5py.File(args['outfile'], 'w') as outfile:
-            fake1 = generate_fake_noise(input_size, num_inputs * 8)
-            fake2 = generate_fake_noise(input_size, num_inputs * 8)
-            real = []
-            for i in range(num_inputs):
-                LOG.info("Generating {0}/{1}".format(i, num_inputs))
-                start = np.random.randint(0, lba.max_samples - input_size)
-                samples = lba.read(start, input_size)
-                for pindex in range(samples.shape[2]):
-                    for findex in range(samples.shape[1]):
-                        real.append(samples[:, findex, pindex])
+        CHUNK_SIZE = 1024 * 1024 * 10
+        samples_read = 0
+        max_samples = args['samples']
 
-            outfile.create_dataset("fake1", fake1)
-            outfile.create_dataset("fake2", fake2)
-            outfile.create_dataset("real", np.array(real))
+        channel = args['channel']
+        polarisation = args['polarisation']
+
+        with h5py.File(args['outfile'], 'w') as outfile:
+            dataset = None
+
+            while samples_read < max_samples:
+                to_read = min(max_samples - samples_read, CHUNK_SIZE)
+                samples = lba.read(samples_read, to_read)[:, channel, polarisation]
+                samples_read += to_read
+
+                LOG.info("{0} / {1}. {2}%".format(samples_read, max_samples, (samples_read / max_samples) * 100))
+
+                if dataset is None:
+                    dataset = outfile.create_dataset('data', data=samples, maxshape=(None,))
+                else:
+                    dataset.resize(dataset.shape[0] + samples.shape[0], axis=0)
+                    dataset[-samples.shape[0]:] = samples
 
 
 if __name__ == "__main__":

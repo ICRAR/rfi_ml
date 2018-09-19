@@ -27,11 +27,13 @@ base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
 import logging
-from torch import nn, optim
+from datetime import datetime
+from torch import nn, optim, Tensor
 from gan import USE_CUDA
 from gan.checkpoint import Checkpoint
 from gan.data import Data
 from gan.models.single_polarisation_single_frequency import Generator, Discriminator
+from gan.visualise import Visualiser
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
@@ -99,22 +101,30 @@ class Train(object):
 
         LOG.info("Loading data...")
         data_loader = Data(filename, self.samples, self.width, self.batch_size)
+        vis_filename = os.path.join(os.path.splitext(filename)[0], str(datetime.now()))
+        vis = Visualiser(vis_filename)
 
         # Training loop
         LOG.info("Training start")
         while epoch < max_epochs:
-            for step, (data, noise) in enumerate(data_loader):
+            for step, (data, noise1, noise2) in enumerate(data_loader):
                 batch_size = data.size(0)
                 if real_labels is None or real_labels.size(0) != batch_size:
+                    if real_labels is not None:
+                        del real_labels
                     real_labels = data_loader.generate_labels(batch_size, [1.0, 0.0])
                 if fake_labels is None or fake_labels.size(0) != batch_size:
+                    if fake_labels is not None:
+                        del fake_labels
                     fake_labels = data_loader.generate_labels(batch_size, [0.0, 1.0])
+
+                # todo: Track training performance over time. Show random sample of input + what the generator created.
 
                 # ============= Train the discriminator =============
                 # Pass real noise through first - ideally the discriminator will return [1, 0]
                 d_output_real = self.discriminator(data)
                 # Pass fake noise through - ideally the discriminator will return [0, 1]
-                g_output_fake1 = self.generator(noise)
+                g_output_fake1 = self.generator(noise1)
                 d_output_fake1 = self.discriminator(g_output_fake1)
 
                 # Determine the loss of the discriminator by adding up the real and fake loss and backpropagate
@@ -127,7 +137,7 @@ class Train(object):
 
                 # =============== Train the generator ===============
                 # Pass in fake noise to the generator and get it to generate "real" noise
-                g_output_fake2 = self.generator(noise)
+                g_output_fake2 = self.generator(noise2)
                 # Judge how good this noise is with the discriminator
                 d_output_fake2 = self.discriminator(g_output_fake2)
 
@@ -138,6 +148,9 @@ class Train(object):
                 g_loss.backward()
                 self.generator_optimiser.step()
 
+                vis.step(d_loss_real.item(), d_loss_fake.item(), g_loss.item())
+                vis.test(self.discriminator, self.generator, noise1, data)
+
                 if step % 5 == 0:
                     # Report data and save checkpoint
                     fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
@@ -146,9 +159,14 @@ class Train(object):
 
             Checkpoint.save_state("discriminator", self.discriminator.state_dict(), self.discriminator_optimiser.state_dict(), epoch)
             Checkpoint.save_state("generator", self.generator.state_dict(), self.generator_optimiser.state_dict(), epoch)
+            vis.plot_training(epoch)
+
+            data, noise1, noise2 = iter(data_loader).__next__()
+            vis.test(self.discriminator, self.generator, noise1, data)
             epoch += 1
 
 
 if __name__ == "__main__":
-    train = Train(1000, 2048, 64)
-    train.train("../../data/v255ae_At_072_060000.lba", 100)
+    width = 4096
+    train = Train(100000000 // width, width, 64)
+    train.train("../../data/At_c0p0.hdf5", 100)

@@ -42,23 +42,22 @@ class Discriminator(nn.Sequential):
         super(Discriminator, self).__init__(
             nn.Linear(width, width),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width),
             nn.Dropout(p=0.4),
 
             nn.Linear(width, width // 2),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width // 2),
             nn.Dropout(p=0.4),
 
             nn.Linear(width // 2, width // 4),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width // 4),
             nn.Dropout(p=0.4),
 
             nn.Linear(width // 4, 2),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
-            nn.Dropout(p=0.4),
+            #nn.Dropout(p=0.4),
             nn.Softmax(dim=1)
         )
 
@@ -77,17 +76,17 @@ class Generator(nn.Sequential):
         super(Generator, self).__init__(
             nn.Linear(width // 16, width // 8),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width // 8),
             nn.Dropout(p=0.4),
 
             nn.Linear(width // 8, width // 4),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width // 4),
             nn.Dropout(p=0.4),
 
             nn.Linear(width // 4, width // 2),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(10),
+            nn.BatchNorm1d(width // 2),
             nn.Dropout(p=0.4),
 
             nn.Linear(width // 2, width),

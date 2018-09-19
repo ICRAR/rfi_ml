@@ -26,8 +26,10 @@ import os
 base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
+import os
 import numpy as np
 import torch
+import h5py
 import logging
 from torch.utils.data import DataLoader, Dataset
 from lba import LBAFile
@@ -79,27 +81,27 @@ class Data(object):
         self.noise = None  # Fake generated gaussian noise
         self.data = None  # Data read in from LBA / HDF5 file
 
-        self.noise = DataLoader(NoiseDataset(self.samples, self.width),
-                                batch_size=batch_size,
-                                shuffle=True,
-                                pin_memory=USE_CUDA,
-                                num_workers=1)
+        self.noise1 = DataLoader(NoiseDataset(self.samples, self.width // 16),
+                                 batch_size=batch_size,
+                                 shuffle=True,
+                                 pin_memory=USE_CUDA,
+                                 num_workers=0)
 
-        # fake_noise_data2 = DataLoader(self.generate_fake_noise(self.samples, self.width),
-        #                               batch_size=batch_size,
-        #                               shuffle=True,
-        #                               pin_memory=self.USE_CUDA,
-        #                               num_workers=1)
+        self.noise2 = DataLoader(NoiseDataset(self.samples, self.width // 16),
+                                 batch_size=batch_size,
+                                 shuffle=True,
+                                 pin_memory=USE_CUDA,
+                                 num_workers=0)
 
         LOG.info("Loading real noise data...")
-        self.data = DataLoader(self.load_data(filename, self.samples, self.width),
+        self.data = DataLoader(self.load_data(filename, self.samples, self.width, 0, 0),
                                batch_size=batch_size,
                                shuffle=True,
                                pin_memory=USE_CUDA,
-                               num_workers=1)
+                               num_workers=0)
 
     def __iter__(self):
-        return zip(self.noise, self.data)
+        return zip(self.data, self.noise1, self.noise2)
 
     @staticmethod
     def normalise(array):
@@ -109,17 +111,18 @@ class Data(object):
         array -= 1.0
         return array
 
-    @staticmethod
-    def generate_fake_noise(samples, width):
+    @classmethod
+    def generate_fake_noise(cls, samples, width):
         """
         Generate a bunch of gaussian noise for training
         :return: A torch data set of gaussian noise
         """
-        data = np.random.normal(0, 1.0, (samples, width)).astype(np.float32)
-        return Data.normalise(data)
+        shape = width if samples == 1 else (samples, width)
+        data = np.random.normal(0, 1.0, shape).astype(np.float32)
+        return cls.normalise(data)
 
     @classmethod
-    def load_data(cls, filename, num_samples, width, frequency=None, polarisation=None):
+    def load_lba(cls, filename, num_samples, width, frequency=None, polarisation=None):
         """
         Load noise data from the specified file
         :param filename: Filename to load data from
@@ -151,15 +154,29 @@ class Data(object):
 
         return cls.normalise(data)
 
+    @classmethod
+    def load_hdf5(cls, filename, num_samples, width, frequency=None, polarisation=None):
+        with h5py.File(filename, 'r') as f:
+            return cls.normalise(f['data'][:num_samples * width].astype(np.float32)).reshape((num_samples, width))
+
+    @classmethod
+    def load_data(cls, filename, num_samples, width, frequency=None, polarisation=None):
+        ext = os.path.splitext(filename)[1]
+        if ext == ".hdf5":
+            return cls.load_hdf5(filename, num_samples, width, frequency, polarisation)
+        elif ext == ".lba":
+            return cls.load_lba(filename, num_samples, width, frequency, polarisation)
+
+
     def generate_labels(self, num_samples, pattern):
         var = torch.FloatTensor([pattern] * num_samples)
         return var.cuda() if USE_CUDA else var
 
 
 if __name__ == "__main__":
-    data_loader = Data("../../data/v255ae_At_072_060000.lba", 1000, 2048, 64)
+    data_loader = Data("../../data/v255ae_At_072_060000.lba", 1000, 4096, 64)
     count = 0
-    for data, noise in data_loader:
+    for data, noise1, noise2 in data_loader:
         count += 1
-        print(data, noise)
+        print(data.shape, noise1.shape, noise2.shape)
     print(count)

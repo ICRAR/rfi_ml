@@ -1,1 +1,1 @@
-USE_CUDA = False
+USE_CUDA = True
