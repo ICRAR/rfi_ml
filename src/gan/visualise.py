@@ -25,7 +25,63 @@ import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from jobs import JobQueue
+
+
+class PdfPlotter(object):
+    def __init__(self, filename, split=False):
+        self.filename = filename
+        self.pdf = None
+        self.split = split
+
+    def __enter__(self):
+        self.pdf = PdfPages(self.filename)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.pdf.close()
+        self.pdf = None
+        return self
+
+    def plot_learning(self, data, title):
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.title(title)
+        plt.xlabel('Step')
+        plt.ylabel('Loss')
+        plt.plot(data)
+        self.pdf.savefig()
+        fig.clear()
+        plt.close(fig)
+
+    def plot_output(self, data, title):
+
+        def plot_single(data, title):
+            plt.title(title)
+            plt.plot(data)
+
+        def plot_split(data, title):
+            if self.split:
+                length = data.shape[0] // 2
+                plt.subplot(1, 2, 1)
+                plot_single(data[:length], title[0])
+                plt.subplot(1, 2, 2)
+                plot_single(data[length:], title[1])
+                plt.tight_layout()
+            else:
+                plot_single(data, title)
+
+        fig = plt.figure(figsize=(16, 9), dpi=80)
+        plt.xlabel('Sample')
+        plt.ylabel('Value')
+        if type(data) == list:
+            for d in data:
+                plot_split(d, title)
+        else:
+            plot_split(data, title)
+        self.pdf.savefig()
+        fig.clear()
+        plt.close(fig)
 
 
 class AutoEncoderTest(object):
@@ -35,10 +91,15 @@ class AutoEncoderTest(object):
         self.real = real
 
     def __call__(self, *args, **kwargs):
-        for i in range(min(5, self.out.shape[0])):
-            Visualiser.plot_output(self.directory, self.out[i], "Generator Output {0}".format(i))
-            Visualiser.plot_output(self.directory, self.real[i], "Real Output {0}".format(i))
-            Visualiser.plot_output(self.directory, [self.real[i], self.out[i]], "Output Real Comparison {0}".format(i))
+        # First half of data is real, second is imaginary. Split these into two plots.
+        with PdfPlotter(os.path.join(self.directory, "plots.pdf"), split=True) as pdf:
+            for i in range(min(5, self.out.shape[0])):
+                base = "Generator Output {0}".format(i)
+                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                base = "Real Output {0}".format(i)
+                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                base = "Output Real Comparison {0}".format(i)
+                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
 
 
 class GANTest(object):
@@ -50,21 +111,22 @@ class GANTest(object):
         self.discriminator_real = discriminator_real
 
     def __call__(self, *args, **kwargs):
-        for i in range(min(10, self.gen_out.shape[0])):
-            Visualiser.plot_output(self.directory, self.gen_out[i], "Generator Output {0}".format(i))
+        with PdfPlotter(os.path.join(self.directory, "plots.pdf")) as pdf:
+            for i in range(min(10, self.gen_out.shape[0])):
+                pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i))
 
-        for i in range(min(10, self.real_out.shape[0])):
-            Visualiser.plot_output(self.directory, self.real_out[i], "Real Data {0}".format(i))
+            for i in range(min(10, self.real_out.shape[0])):
+                pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
 
-        with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
-            f.write("Fake Expected (Data that came from the generator): [0, 1]\n")
-            for i in range(self.discriminator_out.shape[0]):
-                f.write("Fake: [{:.2f}, {:.2f}]\n".format(self.discriminator_out[i][0], self.discriminator_out[i][1]))
+            with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
+                f.write("Fake Expected (Data that came from the generator): [0, 1]\n")
+                for i in range(self.discriminator_out.shape[0]):
+                    f.write("Fake: [{:.2f}, {:.2f}]\n".format(self.discriminator_out[i][0], self.discriminator_out[i][1]))
 
-            f.write("\nReal Expected (Data that came from the dataset): [1, 0]\n")
+                f.write("\nReal Expected (Data that came from the dataset): [1, 0]\n")
 
-            for i in range(self.discriminator_real.shape[0]):
-                f.write("Real: [{:.2f}, {:.2f}]\n".format(self.discriminator_real[i][0], self.discriminator_real[i][1]))
+                for i in range(self.discriminator_real.shape[0]):
+                    f.write("Real: [{:.2f}, {:.2f}]\n".format(self.discriminator_real[i][0], self.discriminator_real[i][1]))
 
 
 class PlotLearning(object):
@@ -75,12 +137,13 @@ class PlotLearning(object):
         self.g_loss = g_loss
 
     def __call__(self, *args, **kwargs):
-        if len(self.d_loss_real) > 0:
-            Visualiser.plot_learning(self.directory, self.d_loss_real, "Discriminator Loss Real")
-        if len(self.d_loss_fake) > 0:
-            Visualiser.plot_learning(self.directory, self.d_loss_fake, "Discriminator Loss Fake")
-        if len(self.g_loss) > 0:
-            Visualiser.plot_learning(self.directory, self.g_loss, "Generator Loss")
+        with PdfPlotter(os.path.join(self.directory, "training.pdf")) as pdf:
+            if len(self.d_loss_real) > 0:
+                pdf.plot_learning(self.d_loss_real, "Discriminator Loss Real")
+            if len(self.d_loss_fake) > 0:
+                pdf.plot_learning(self.d_loss_fake, "Discriminator Loss Fake")
+            if len(self.g_loss) > 0:
+                pdf.plot_learning(self.g_loss, "Generator Loss")
 
 
 class Visualiser(object):
@@ -95,33 +158,6 @@ class Visualiser(object):
     def __del__(self):
         print("Waiting for jobs to finish...")
         self.queue.join()
-
-    @staticmethod
-    def plot_learning(directory, data, title):
-        fig = plt.figure(figsize=(16, 9), dpi=80)
-        plt.title(title)
-        plt.xlabel('Step')
-        plt.ylabel('Loss')
-        plt.plot(data)
-        plt.savefig(os.path.join(directory, title))
-        fig.clear()
-        plt.close(fig)
-
-    @staticmethod
-    def plot_output(directory, data, title):
-        fig = plt.figure(figsize=(16, 9), dpi=80)
-        plt.title(title)
-        plt.xlabel('Sample')
-        plt.ylabel('Voltage')
-        if type(data) == list:
-            for d in data:
-                plt.plot(d)
-        else:
-            plt.plot(data)
-        plt.savefig(os.path.join(directory, title))
-        fig.clear()
-        plt.close(fig)
-        pass
 
     def _get_directory(self, epoch):
         directory = os.path.join(self.base_directory, "{0}".format(epoch))

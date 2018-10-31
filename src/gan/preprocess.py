@@ -23,8 +23,6 @@
 
 """
 Preprocess samples from an lba file and generate training data.
-No fft version
-Extract samples from lba files and use them directly
 """
 import os
 import argparse

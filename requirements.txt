@@ -1,0 +1,13 @@
+cycler
+h5py
+kiwisolver
+matplotlib
+numpy
+Pillow
+pip
+pyparsing
+python-dateutil
+setuptools
+six
+torch
+torchvision

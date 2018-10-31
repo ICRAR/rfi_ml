@@ -173,6 +173,7 @@ class Data(object):
             real = d[:, :width // 2]
             imag = d[:, width // 2:]
 
+            # Convert from real, imaginary to abs, angle
             if self.use_angle_abs:
                 in_angle = np.arctan2(real, imag)
 
@@ -186,6 +187,7 @@ class Data(object):
                 real = in_abs
                 imag = in_angle
 
+            # Normalise reals and imaginaries individually.
             return np.concatenate((self.normalise(real), self.normalise(imag)), axis=1)
 
     def load_data(self, filename, num_samples, width, frequency=None, polarisation=None):
