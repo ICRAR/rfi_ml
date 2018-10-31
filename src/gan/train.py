@@ -42,7 +42,6 @@ SAMPLE_SIZE = 1024  # 1024 signal samples to train on
 TRAINING_BATCH_SIZE = 100
 TRAINING_BATCHES = 10000
 
-REMOVE_FFT_REAL_SECOND_HALF = False
 USE_ANGLE_ABS = False  # Convert from real, imag input to abs, angle
 ADD_DROPOUT = True  # if true, add dropout to the inputs before passing them into the network
 ADD_NOISE = False  # if true, add noise to the inputs before passing them into the network
@@ -64,11 +63,8 @@ class Train(object):
         Checkpoint.create_directory("generator")
 
         LOG.info("Creating models...")
-        if REMOVE_FFT_REAL_SECOND_HALF:
-            LOG.info("Removing FFT second half")
-            width = int(width * 0.75)
         self._discriminator = Discriminator(width)
-        self._generator = Generator(width, REMOVE_FFT_REAL_SECOND_HALF)
+        self._generator = Generator(width)
 
         self.noise_width = self._generator.get_noise_width()
 
@@ -109,9 +105,7 @@ class Train(object):
         criterion = nn.SmoothL1Loss()
 
         LOG.info("Loading data...")
-        data_loader = Data(filename, self.samples, self.width, self.noise_width, self.batch_size,
-                           remove_fft_second_half=REMOVE_FFT_REAL_SECOND_HALF,
-                           use_angle_abs=USE_ANGLE_ABS)
+        data_loader = Data(filename, self.samples, self.width, self.noise_width, self.batch_size, use_angle_abs=USE_ANGLE_ABS)
         vis = Visualiser(os.path.join(os.path.splitext(filename)[0], str(datetime.now())))
         epoch = start_epoch
 
@@ -119,6 +113,7 @@ class Train(object):
             for step, (data, _, _) in enumerate(data_loader):
                 data_cuda = data.cuda()
                 if ADD_DROPOUT:
+                    # Drop out parts of the input, but train on the full input.
                     out = self.generator(nn.functional.dropout(data_cuda, 0.5))
                 else:
                     out = self.generator(data_cuda)

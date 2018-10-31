@@ -64,7 +64,7 @@ class Generator(nn.Sequential):
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
     """
 
-    def __init__(self, width, remove_fft_second_half):
+    def __init__(self, width):
         """
         Construct the generator
         :param width: Number of samples to put through the network per batch.
@@ -75,27 +75,24 @@ class Generator(nn.Sequential):
             return [
                 nn.Linear(in_size, out_size),
                 nn.ELU(alpha=1),
+                nn.Dropout(0.3)
             ]
         def encoder(width):
             return nn.Sequential(
                 nn.BatchNorm1d(width),
                 *layer(width, width * 4),
                 *layer(width * 4, width),
-                nn.Dropout(0.5),
                 *layer(width, width // 4),
                 *layer(width // 4, width // 4),
                 *layer(width // 4, width // 8),
-                nn.Dropout(0.5),
                 *layer(width // 8, width // 8),
             )
         def decoder(width):
             return nn.Sequential(
                 *layer(width // 8, width // 4),
                 nn.BatchNorm1d(width // 4),
-                nn.Dropout(0.5),
                 *layer(width // 4, width // 4),
                 *layer(width // 4, width // 4),
-                nn.Dropout(0.5),
                 *layer(width // 4, width // 2),
                 nn.BatchNorm1d(width // 2),
                 nn.Linear(width // 2, width),
@@ -109,7 +106,6 @@ class Generator(nn.Sequential):
 
         self.width = width
         self.is_autoencoder = False
-        self.remove_fft_second_half = remove_fft_second_half
 
     def forward(self, x):
         if self.is_autoencoder:
