@@ -27,6 +27,7 @@ Has option to use FFT of samples (2N width per batch)
 """
 
 from torch import nn
+import torch
 
 
 class Discriminator(nn.Sequential):
@@ -39,25 +40,21 @@ class Discriminator(nn.Sequential):
         Construct the discriminator
         :param width: Number of samples put through the network per batch.
         """
+        def layer(in_size, out_size):
+            return [
+                nn.Linear(in_size, out_size),
+                nn.ELU(alpha=0.3),
+                nn.BatchNorm1d(out_size),
+                nn.Dropout(p=0.4)
+            ]
+
         super(Discriminator, self).__init__(
-            nn.Linear(width, width),
+            *layer(width, width // 2),
+            *layer(width // 2, width // 4),
+            *layer(width // 4, width // 8),
+            *layer(width // 8, width // 16),
+            nn.Linear(width // 16, 2),
             nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width),
-            nn.Dropout(p=0.4),
-
-            nn.Linear(width, width // 2),
-            nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width // 2),
-            nn.Dropout(p=0.4),
-
-            nn.Linear(width // 2, width // 4),
-            nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width // 4),
-            nn.Dropout(p=0.4),
-
-            nn.Linear(width // 4, 2),
-            nn.ELU(alpha=0.3),
-            #nn.Dropout(p=0.4),
             nn.Softmax(dim=1)
         )
 
@@ -67,35 +64,55 @@ class Generator(nn.Sequential):
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
     """
 
-    def __init__(self, width):
+    def __init__(self, width, remove_fft_second_half):
         """
         Construct the generator
         :param width: Number of samples to put through the network per batch.
         :param noise_width: Width of the input noise vector to the network.
         """
-        super(Generator, self).__init__(
-            nn.Linear(width // 16, width // 8),
-            nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width // 8),
-            nn.Dropout(p=0.4),
+        super(Generator, self).__init__()
+        def layer(in_size, out_size):
+            return [
+                nn.Linear(in_size, out_size),
+                nn.ELU(alpha=1)
+            ]
+        def encoder(width):
+            return nn.Sequential(
+                nn.BatchNorm1d(width),
+                *layer(width, width * 4),
+                *layer(width * 4, width),
+                *layer(width, width // 4),
+                *layer(width // 4, width // 8),
+                *layer(width // 8, width // 8),
+            )
+        def decoder(width):
+            return nn.Sequential(
+                *layer(width // 8, width // 4),
+                nn.BatchNorm1d(width // 4),
+                *layer(width // 4, width // 4),
+                *layer(width // 4, width // 4),
+                nn.BatchNorm1d(width // 4),
+                nn.Linear(width // 4, width),
+            )
+        self.encoder = encoder(width)
+        self.decoder = decoder(width)
 
-            nn.Linear(width // 8, width // 4),
-            nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width // 4),
-            nn.Dropout(p=0.4),
-
-            nn.Linear(width // 4, width // 2),
-            nn.ELU(alpha=0.3),
-            nn.BatchNorm1d(width // 2),
-            nn.Dropout(p=0.4),
-
-            nn.Linear(width // 2, width),
-            nn.ELU()
-        )
         self.width = width
+        self.is_autoencoder = False
+        self.remove_fft_second_half = remove_fft_second_half
+
+    def forward(self, x):
+        if self.is_autoencoder:
+            return self.decoder(self.encoder(x))
+        else:
+            return self.decoder(x)
 
     def get_noise_width(self):
         """
-        :return: Width of the noise vector that the generator expects
+        :return: Width of the noise vector that the generator expects when in decoder mode
         """
         return self.width // 16
+
+    def set_autoencoder(self, is_autoencoder):
+        self.is_autoencoder = is_autoencoder
+        return self

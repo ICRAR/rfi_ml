@@ -75,29 +75,32 @@ class NoiseDataset(Dataset):
 
 class Data(object):
 
-    def __init__(self, filename, samples, width, batch_size):
+    def __init__(self, filename, samples, width, noise_width, batch_size, **kwargs):
         self.width = width
         self.samples = samples
         self.noise = None  # Fake generated gaussian noise
         self.data = None  # Data read in from LBA / HDF5 file
 
-        self.noise1 = DataLoader(NoiseDataset(self.samples, self.width // 16),
+        self.remove_fft_second_half = kwargs.get("remove_fft_second_half", False)
+        self.use_angle_abs = kwargs.get("use_angle_abs", False)
+
+        self.noise1 = DataLoader(NoiseDataset(self.samples, noise_width),
                                  batch_size=batch_size,
                                  shuffle=True,
-                                 pin_memory=USE_CUDA,
+                                 pin_memory=False,
                                  num_workers=0)
 
-        self.noise2 = DataLoader(NoiseDataset(self.samples, self.width // 16),
+        self.noise2 = DataLoader(NoiseDataset(self.samples, noise_width),
                                  batch_size=batch_size,
                                  shuffle=True,
-                                 pin_memory=USE_CUDA,
+                                 pin_memory=False,
                                  num_workers=0)
 
         LOG.info("Loading real noise data...")
         self.data = DataLoader(self.load_data(filename, self.samples, self.width, 0, 0),
                                batch_size=batch_size,
                                shuffle=True,
-                               pin_memory=USE_CUDA,
+                               pin_memory=False,
                                num_workers=0)
 
     def __iter__(self):
@@ -119,7 +122,7 @@ class Data(object):
         """
         shape = width if samples == 1 else (samples, width)
         data = np.random.normal(0, 1.0, shape).astype(np.float32)
-        return cls.normalise(data)
+        return data
 
     @classmethod
     def load_lba(cls, filename, num_samples, width, frequency=None, polarisation=None):
@@ -154,19 +157,43 @@ class Data(object):
 
         return cls.normalise(data)
 
-    @classmethod
-    def load_hdf5(cls, filename, num_samples, width, frequency=None, polarisation=None):
+    def load_hdf5(self, filename, num_samples, width, frequency=None, polarisation=None):
         with h5py.File(filename, 'r') as f:
-            return cls.normalise(f['data'][:num_samples * width].astype(np.float32)).reshape((num_samples, width))
+            d = f['data']
+            d = d[0:num_samples].astype(np.float32).reshape((num_samples, width))
+            if self.remove_fft_second_half:
+                # The second part of the real FFT values is simply mirrored and can be reconstructed anyway,
+                # so remove it from the data.
+                # We end up with [fft 1st half real ... fft imaginary 1st and 2nd half] for a size of 0.75 * width
+                fft_part_size = width // 4
+                mask = np.ones(width, dtype=bool)
+                mask[fft_part_size:fft_part_size * 2] = False
+                d = d[:, mask]
 
-    @classmethod
-    def load_data(cls, filename, num_samples, width, frequency=None, polarisation=None):
+            real = d[:, :width // 2]
+            imag = d[:, width // 2:]
+
+            if self.use_angle_abs:
+                in_angle = np.arctan2(real, imag)
+
+                # Do sqrt(r * r + i * i) in place to avoid memory overheads
+                real *= real
+                imag *= imag
+                real += imag
+
+                in_abs = np.sqrt(real)
+
+                real = in_abs
+                imag = in_angle
+
+            return np.concatenate((self.normalise(real), self.normalise(imag)), axis=1)
+
+    def load_data(self, filename, num_samples, width, frequency=None, polarisation=None):
         ext = os.path.splitext(filename)[1]
         if ext == ".hdf5":
-            return cls.load_hdf5(filename, num_samples, width, frequency, polarisation)
+            return self.load_hdf5(filename, num_samples, width, frequency, polarisation)
         elif ext == ".lba":
-            return cls.load_lba(filename, num_samples, width, frequency, polarisation)
-
+            return self.load_lba(filename, num_samples, width, frequency, polarisation)
 
     def generate_labels(self, num_samples, pattern):
         var = torch.FloatTensor([pattern] * num_samples)
