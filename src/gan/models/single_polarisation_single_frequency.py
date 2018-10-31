@@ -107,6 +107,12 @@ class Generator(nn.Sequential):
         self.width = width
         self.is_autoencoder = False
 
+        def init_weights(m):
+            if type(m) is nn.Linear:
+                nn.init.xavier_uniform(m.weight)
+
+        self.apply(init_weights)
+
     def forward(self, x):
         if self.is_autoencoder:
             return self.decoder(self.encoder(x))

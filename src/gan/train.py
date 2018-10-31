@@ -78,7 +78,7 @@ class Train(object):
             self.generator = self._generator
 
         # self.discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0003, betas=(0.5, 0.999))
-        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.0003, betas=(0.5, 0.999))
+        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.005, betas=(0.5, 0.999))
 
     def train_discriminator_autoencoder(self, filename, max_epochs):
         LOG.info("Training generator as autoencoder...")
@@ -113,7 +113,7 @@ class Train(object):
             for step, (data, _, _) in enumerate(data_loader):
                 data_cuda = data.cuda()
                 if ADD_DROPOUT:
-                    # Drop out parts of the input, but train on the full input.
+                    # Drop out parts of the input, but compute loss on the full input.
                     out = self.generator(nn.functional.dropout(data_cuda, 0.5))
                 else:
                     out = self.generator(data_cuda)

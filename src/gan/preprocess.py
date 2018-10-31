@@ -24,7 +24,9 @@
 """
 Preprocess samples from an lba file and generate training data.
 """
-import os
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+print(sys.path)
 import argparse
 import logging
 import h5py
@@ -41,11 +43,11 @@ def parse_args():
     parser.add_argument('outfile', type=str, help="Output file to write to")
     parser.add_argument('--all', default=False, action='store_true', help="Save all data for all channels and polarisations")
     parser.add_argument('--fft', default=False, action='store_true', help="Perform an FFT on the data and save the FFT output")
-    parser.add_argument('--fft_size', type=int, default=4096, help="")
-    parser.add_argument('--samples', type=int, help="Number of samples to read")
-    parser.add_argument('--channel', type=int, help="Pull out a specific channel from the signal")
-    parser.add_argument('--polarisation', type=int, help='Pull out a specific polarisation from the signal')
-    parser.add_argument('--fft_angles_abs', default=False, action='store_true', help="If present, use the phase angles and absolute FFT values instead of the real and imaginary values")
+    parser.add_argument('--fft_size', type=int, default=4096, help="The number of samples per FFT to use. This number should also be set in train.py to match whatever number you used here.")
+    parser.add_argument('--samples', type=int, help="Number of samples to read. If using --fft, this will round to the next multiple of --fft_size")
+    parser.add_argument('--channel', type=int, help="Pull out a specific channel from the signal. Can be 0, 1, 2, 3")
+    parser.add_argument('--polarisation', type=int, help='Pull out a specific polarisation from the signal. Can be 0, 1')
+    parser.add_argument('--fft_angles_abs', default=False, action='store_true', help="If present, convert the real and imaginary FFT values to an absolute and phase angle value")
     return vars(parser.parse_args())
 
 
@@ -135,6 +137,9 @@ def main():
 
         max_samples = args['samples']
         if args['fft']:
+            # If using FFT, set the chunk size to the fft size.
+            # Either read out the next largest multiple of this chunk size above the specified max_samples,
+            # if there's enough samples in the lba file to do this. If not, read the next smallest.
             CHUNK_SIZE = args['fft_size']
             max_possible_samples = lba.max_samples - (lba.max_samples % CHUNK_SIZE) # Next smallest multiple of CHUNK_SIZE
             max_samples = max_samples - (max_samples % CHUNK_SIZE) + CHUNK_SIZE  # Next largest multiple of CHUNK_SIZE
@@ -155,8 +160,10 @@ def main():
                 LOG.info("{0} / {1}. {2}%".format(samples_read, max_samples, (samples_read / max_samples) * 100))
 
                 if args['fft']:
+                    # Read lba samples, fft them and write out
                     write_fft(outfile, 'data', samples, args['fft_angles_abs'])
                 else:
+                    # Write samples out raw
                     write_raw(outfile, 'data', samples)
 
 
