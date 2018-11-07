@@ -41,7 +41,6 @@ LOG = logging.getLogger(__name__)
 SAMPLE_SIZE = 1024  # 1024 signal samples to train on
 TRAINING_BATCH_SIZE = 100
 TRAINING_BATCHES = 10000
-EPOCHS = 100
 
 USE_ANGLE_ABS = False  # Convert from real, imag input to abs, angle
 ADD_DROPOUT = True  # if true, add dropout to the inputs before passing them into the network
@@ -79,7 +78,7 @@ class Train(object):
             self.generator = self._generator
 
         # self.discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0003, betas=(0.5, 0.999))
-        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.005, betas=(0.5, 0.999))
 
     def train_discriminator_autoencoder(self, filename, max_epochs):
         LOG.info("Training generator as autoencoder...")
@@ -104,8 +103,6 @@ class Train(object):
 
     def _train_discriminator_autoencoder(self, filename, start_epoch, max_epochs):
         criterion = nn.SmoothL1Loss()
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.generator_optimiser)
-        lr_scheduler.verbose = True
 
         LOG.info("Loading data...")
         data_loader = Data(filename, self.samples, self.width, self.noise_width, self.batch_size, use_angle_abs=USE_ANGLE_ABS)
@@ -136,7 +133,6 @@ class Train(object):
             vis.plot_training(epoch)
             data, _, _ = iter(data_loader).__next__()
             vis.test_autoencoder(epoch, self.generator, data_cuda)
-            lr_scheduler.step(loss, epoch)
             epoch += 1
 
     def train(self, filename, max_epochs):
@@ -244,6 +240,6 @@ if __name__ == "__main__":
     train = Train(samples // width, width, 4096, fft)
     if autoencoder:
         #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", EPOCHS)
+        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", 50)
     else:
-        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", EPOCHS)
+        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
