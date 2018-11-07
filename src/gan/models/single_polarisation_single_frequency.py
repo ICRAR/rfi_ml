@@ -71,38 +71,30 @@ class Generator(nn.Sequential):
         :param noise_width: Width of the input noise vector to the network.
         """
         super(Generator, self).__init__()
-        def layer(in_size, out_size):
-            return [
-                nn.Linear(in_size, out_size),
-                nn.ELU(alpha=1),
-                nn.Dropout(0.3)
+
+        def layer(in_size, out_size, dropout=True):
+            layers = [
+                nn.Linear(in_size, out_size)
             ]
+
+            if dropout:
+                layers.append(nn.Dropout(0.5))
+
+            return layers
+
         def encoder(width):
             return nn.Sequential(
-                nn.BatchNorm1d(width),
-                *layer(width, width * 4),
-                *layer(width * 4, width),
-                *layer(width, width // 4),
-                *layer(width // 4, width // 4),
-                *layer(width // 4, width // 8),
-                *layer(width // 8, width // 8),
+                *layer(width, width),
+                *layer(width, width, dropout=False),
             )
         def decoder(width):
             return nn.Sequential(
-                *layer(width // 8, width // 4),
-                nn.BatchNorm1d(width // 4),
-                *layer(width // 4, width // 4),
-                *layer(width // 4, width // 4),
-                *layer(width // 4, width // 2),
-                nn.BatchNorm1d(width // 2),
-                nn.Linear(width // 2, width),
+                *layer(width, width),
+                *layer(width, width, dropout=False),
             )
+
         self.encoder = encoder(width)
         self.decoder = decoder(width)
-
-        #self.encoder_real = encoder(width * 0.5)
-        #self.encoder_fake = encoder(width * 0.5)
-        # self.encoder_hidden = encoder_hidden(width * 0.5)
 
         self.width = width
         self.is_autoencoder = False
