@@ -44,44 +44,31 @@ class Discriminator(nn.Sequential):
 
         super(Discriminator, self).__init__()
         self.conv1 = nn.Conv1d(1, 64, kernel_size=128)
-        self.conv1.double()     # Force the Conv1d to use a double
         self.max_pool1 = nn.MaxPool1d(2, stride=2)
 
         self.conv2 = nn.Conv1d(64, 128, kernel_size=64)
-        self.conv2.double()     # Force the Conv1d to use a double
         self.max_pool2 = nn.MaxPool1d(2, stride=2)
 
         self.conv3 = nn.Conv1d(128, 256, kernel_size=32)
-        self.conv3.double()     # Force the Conv1d to use a double
         self.max_pool3 = nn.MaxPool1d(2, stride=2)
 
         self.fc1 = nn.Linear(53248, 13312)
-        self.fc1.double()
         self.batch_norm1 = nn.BatchNorm1d(13312)
         self.batch_norm1.double()
 
         self.fc2 = nn.Linear(13312, 3328)
-        self.fc2.double()
         self.batch_norm2 = nn.BatchNorm1d(3328)
-        self.batch_norm2.double()
 
         self.fc3 = nn.Linear(3328, width // 4)     # output size = 512
-        self.fc3.double()
         self.batch_norm3 = nn.BatchNorm1d(width // 4)
-        self.batch_norm3.double()
 
         self.fc4 = nn.Linear(width // 4, width // 8) # output size = 256
-        self.fc4.double()
         self.batch_norm4 = nn.BatchNorm1d(width // 8)
-        self.batch_norm4.double()
 
         self.fc5 = nn.Linear(width // 8, width // 16)
-        self.fc5.double()
         self.batch_norm5 = nn.BatchNorm1d(width//16)
-        self.batch_norm5.double()
 
         self.fc6 = nn.Linear(width // 16, 2)
-        self.fc6.double()
 
     def forward(self, x):
         x = self.max_pool1(F.elu(self.conv1(x), alpha=0.3))
