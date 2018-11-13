@@ -49,6 +49,7 @@ class PdfPlotter(object):
         plt.title(title)
         plt.xlabel('Step')
         plt.ylabel('Loss')
+        plt.yscale('log')
         plt.plot(data)
         self.pdf.savefig()
         fig.clear()
