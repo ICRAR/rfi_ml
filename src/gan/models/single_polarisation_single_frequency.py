@@ -43,35 +43,35 @@ class Discriminator(nn.Sequential):
         """
 
         super(Discriminator, self).__init__()
-        self.conv1 = nn.Conv1d(1, 6, kernel_size=5)
+        self.conv1 = nn.Conv1d(1, 20, kernel_size=3)
         self.max_pool1 = nn.MaxPool1d(2, stride=2)
-        self.conv2 = nn.Conv1d(6, 16, kernel_size=3)
+        self.conv2 = nn.Conv1d(20, 50, kernel_size=2)
         self.max_pool2 = nn.MaxPool1d(2, stride=2)
 
-        self.fc1 = nn.Linear(8160, width)
-        self.batch_norm1 = nn.BatchNorm1d(width)
+        self.fc1 = nn.Linear(25550, width * 4)
+        #self.batch_norm1 = nn.BatchNorm1d(width)
 
-        self.fc2 = nn.Linear(width, width//4)
-        self.batch_norm2 = nn.BatchNorm1d(width//4)
+        self.fc2 = nn.Linear(width * 4, width)
+        #self.batch_norm2 = nn.BatchNorm1d(width//4)
 
-        self.fc3 = nn.Linear(width//4, width // 8)  # output size = 512
-        self.batch_norm3 = nn.BatchNorm1d(width // 8)
-        self.fc4 = nn.Linear(width//8, width//16)   # output size = 256
+        self.fc3 = nn.Linear(width, width//4)  # output size = 512
+        self.batch_norm3 = nn.BatchNorm1d(width // 4)
+        self.fc4 = nn.Linear(width//4, width//16)   # output size = 256
         self.batch_norm4 = nn.BatchNorm1d(width//16)
 
         self.fc5 = nn.Linear(width // 16, 2)
 
     def forward(self, x):
-        x = self.max_pool1(F.hardtanh(self.conv1(x)))
-        x = self.max_pool2(F.hardtanh(self.conv2(x)))
+        x = self.max_pool1(F.elu(self.conv1(x), alpha=0.3))
+        x = self.max_pool2(F.elu(self.conv2(x), alpha=0.3))
         x = x.view(-1, x.size()[1]*x.size()[2])
 
-        x = self.batch_norm1(F.hardtanh(self.fc1(x)))
-        x = self.batch_norm2(F.hardtanh(self.fc2(x)))
-        x = self.batch_norm3(F.hardtanh(self.fc3(x)))
-        x = self.batch_norm4(F.hardtanh(self.fc4(x)))
+        x = F.elu(self.fc1(x), alpha=0.3)
+        x = F.elu(self.fc2(x), alpha=0.3)
+        x = F.dropout(self.batch_norm3(F.elu(self.fc3(x), alpha=0.3)),p=0.4)
+        x = F.dropout(self.batch_norm4(F.elu(self.fc4(x), alpha=0.3)), p=0.4)
         # todo: try tanh rather than ELU and check why do we need softmax
-        x = F.tanh(self.fc5(x))
+        x = F.softmax(F.elu(self.fc5(x), alpha=0.3), dim=1)
         return x
 
 class Generator(nn.Sequential):
