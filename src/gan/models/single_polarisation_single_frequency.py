@@ -44,22 +44,31 @@ class Discriminator(nn.Sequential):
 
         super(Discriminator, self).__init__()
         self.conv1 = nn.Conv1d(1, 20, kernel_size=3)
+        self.conv1.double()
         self.max_pool1 = nn.MaxPool1d(2, stride=2)
         self.conv2 = nn.Conv1d(20, 50, kernel_size=2)
+        self.conv1.double()
         self.max_pool2 = nn.MaxPool1d(2, stride=2)
 
         self.fc1 = nn.Linear(25550, width * 4)
+        self.fc1.double()
         #self.batch_norm1 = nn.BatchNorm1d(width)
 
         self.fc2 = nn.Linear(width * 4, width)
+        self.fc2.double()
         #self.batch_norm2 = nn.BatchNorm1d(width//4)
 
         self.fc3 = nn.Linear(width, width//4)  # output size = 512
+        self.fc3.double()
         self.batch_norm3 = nn.BatchNorm1d(width // 4)
+        self.batch_norm3.double()
         self.fc4 = nn.Linear(width//4, width//16)   # output size = 256
+        self.fc4.double()
         self.batch_norm4 = nn.BatchNorm1d(width//16)
+        self.batch_norm4.double()
 
         self.fc5 = nn.Linear(width // 16, 2)
+        self.fc5.double()
 
     def forward(self, x):
         x = self.max_pool1(F.elu(self.conv1(x), alpha=0.3))
