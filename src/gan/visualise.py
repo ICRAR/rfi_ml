@@ -27,7 +27,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from jobs import JobQueue
-
+plt.rcParams.update({'font.size': 22})
 
 class PdfPlotter(object):
     def __init__(self, filename, split=False):
