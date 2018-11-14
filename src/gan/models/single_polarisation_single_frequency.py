@@ -65,7 +65,7 @@ class Discriminator(nn.Sequential):
         x = self.max_pool1(F.elu(self.conv1(x), alpha=0.3))
         x = self.max_pool2(F.elu(self.conv2(x), alpha=0.3))
         x = x.view(-1, x.size()[1]*x.size()[2])
-
+        x = F.dropout(x, p=0.4)
         x = F.elu(self.fc1(x), alpha=0.3)
         x = F.elu(self.fc2(x), alpha=0.3)
         x = F.dropout(self.batch_norm3(F.elu(self.fc3(x), alpha=0.3)),p=0.4)
