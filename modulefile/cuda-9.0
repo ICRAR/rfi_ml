@@ -1,0 +1,16 @@
+#%Module 1.0
+#
+# 'cuda v9.0' module package
+
+set 		CUDA_version	9.0
+set		CUDA_DIR	/usr/local/cuda-9.0
+
+append-path 	PATH		$CUDA_DIR/bin
+append-path	INCLUDE		$CUDA_DIR/include
+append-path	LD_LIBRARY_PATH	$CUDA_DIR/lib64
+
+# append PATH libvvm
+append-path	PATH		$CUDA_DIR/libnvvm/bin
+append-path	INCLUDE		$CUDA_DIR/libnvvm/include
+append-path	LD_LIBRARY_PATH	$CUDA_DIR/libnvvm/lib64
+append-path	LD_LIBRARY_PATH	$CUDA_DIR/libnvvm/libdevice
