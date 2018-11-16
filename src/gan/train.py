@@ -234,8 +234,8 @@ if __name__ == "__main__":
     parser.add_argument('--samples', type=int, default=500000000, metavar='N', help='input sample size for training (default: 500000000)')
     parser.add_argument('--epochs', type=int, default=25, metavar='N', help='number of epochs to train (default: 25)')
     parser.add_argument('--use-gpu', action='store_true', default=False, help='use the GPU if it is available')
-    parser.add_argument('--data-path', default='../../data"', help='the path to the data file')
-    parser.add_argument('--data-file', default='At_c0_p0_s1000000000_fft2048.hdf5"', help='the name of the data file')
+    #parser.add_argument('--data-path', default='../../data"', help='the path to the data file')
+    #parser.add_argument('--data-file', default='At_c0_p0_s1000000000_fft2048.hdf5"', help='the name of the data file')
     parser.add_argument('--fft', default=True, action='store_false', help="enable fft to the data (default: True)")
     parser.add_argument('--width', type=int, default=2048, metavar='N', help='width size needed to train')
     parser.add_argument('--autoencoder', action='store_false', default=True, help='enable autoencoder in generator and discriminator')
@@ -262,6 +262,6 @@ if __name__ == "__main__":
     #print(train.discriminator)
     if kwargs['autoencoder']:
         #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder(kwargs['data_path']+'/'+kwargs['data_file'], kwargs['epochs'])
+        train.train_discriminator_autoencoder("../.../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
     else:
-        train.train(kwargs['data_path']+'/'+kwargs['data_file'], kwargs['epochs'])
+        train.train("../.../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
