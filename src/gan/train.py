@@ -262,6 +262,6 @@ if __name__ == "__main__":
     #print(train.discriminator)
     if kwargs['autoencoder']:
         #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder("../.../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
+        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
     else:
-        train.train("../.../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
+        train.train("../../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
