@@ -84,7 +84,7 @@ class Discriminator(nn.Sequential):
         # todo: try tanh
         x = F.elu(self.fc6(x), alpha=0.3)
         # todo: check this softmax
-        x = F.softmax(x, dim=1)
+        x = F.tanh(x, dim=1)
         return x
 
 class Generator(nn.Sequential):
