@@ -20,9 +20,8 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
-import argparse
+
 import sys
-import torch
 import os
 base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
@@ -229,39 +228,18 @@ class Train(object):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GAN Training")
-    parser.add_argument('--batch-size', type=int, default=4096, metavar='N', help='input batch size for training (default: 4096)')
-    parser.add_argument('--samples', type=int, default=500000000, metavar='N', help='input sample size for training (default: 500000000)')
-    parser.add_argument('--epochs', type=int, default=25, metavar='N', help='number of epochs to train (default: 25)')
-    parser.add_argument('--use-gpu', action='store_true', default=False, help='use the GPU if it is available')
-    #parser.add_argument('--data-path', default='../../data"', help='the path to the data file')
-    #parser.add_argument('--data-file', default='At_c0_p0_s1000000000_fft2048.hdf5"', help='the name of the data file')
-    parser.add_argument('--fft', default=True, action='store_false', help="enable fft to the data (default: True)")
-    parser.add_argument('--width', type=int, default=2048, metavar='N', help='width size needed to train')
-    parser.add_argument('--autoencoder', action='store_false', default=True, help='enable autoencoder in generator and discriminator')
-
-    kwargs = vars(parser.parse_args())
-
-    if kwargs['use_gpu'] and torch.cuda.is_available():
-        kwargs['cuda_device_count'] = torch.cuda.device_count()
-        if torch.cuda.get_device_capability(0)[0] > 3:
-            kwargs['using_gpu'] = True
-        else:
-            kwargs['using_gpu'] = False
-    else:
-        kwargs['cuda_device_count'] = 0
-        kwargs['using_gpu'] = False
-    USE_CUDA = kwargs['using_gpu']
-
-    if kwargs['fft']:
+    autoencoder = True
+    samples = 1000000000 // 2  # can't load 16gb of data in you fool
+    width = 2048
+    fft = True
+    if fft:
         # 1000001536, next a largest multiple of width
-        kwargs['samples'] = kwargs['samples'] - (kwargs['samples'] % kwargs['width']) + kwargs['width']
-        kwargs['width'] *= 2  # Double width for fft (real + imag values)
+        samples = samples - (samples % width) + width
+        width *= 2  # Double width for fft (real + imag values)
 
-    train = Train(kwargs['samples'] // kwargs['width'], kwargs['width'], kwargs['batch_size'], kwargs['fft'])
-    #print(train.discriminator)
-    if kwargs['autoencoder']:
+    train = Train(samples // width, width, 4096, fft)
+    if autoencoder:
         #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
+        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", 50)
     else:
-        train.train("../../data/At_c0_p0_s1000000000_fft2048.hdf5", kwargs['epochs'])
+        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
