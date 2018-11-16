@@ -54,7 +54,6 @@ class Discriminator(nn.Sequential):
 
         self.fc1 = nn.Linear(53248, 13312)
         self.batch_norm1 = nn.BatchNorm1d(13312)
-        self.batch_norm1.double()
 
         self.fc2 = nn.Linear(13312, 3328)
         self.batch_norm2 = nn.BatchNorm1d(3328)
@@ -76,8 +75,8 @@ class Discriminator(nn.Sequential):
         x = self.max_pool3(F.elu(self.conv3(x), alpha=0.3))
         x = x.view(-1, x.size()[1]*x.size()[2])
 
-        x = self.batchnorm1(F.elu(self.fc1(x), alpha=0.3))
-        x = self.batchnorm2(F.elu(self.fc2(x), alpha=0.3))
+        x = self.batch_norm1(F.elu(self.fc1(x), alpha=0.3))
+        x = self.batch_norm2(F.elu(self.fc2(x), alpha=0.3))
         x = self.batch_norm3(F.elu(self.fc3(x), alpha=0.3))
         x = self.batch_norm4(F.elu(self.fc4(x), alpha=0.3))
         x = self.batch_norm5(F.elu(self.fc5(x), alpha=0.3))
