@@ -67,17 +67,17 @@ class Discriminator(nn.Sequential):
         self.fc5 = nn.Linear(width // 16, 2)
 
     def forward(self, x):
-        x = self.max_pool1(F.tanh(self.conv1(x)))
-        x = self.max_pool2(F.tanh(self.conv2(x)))
-        x = self.max_pool3(F.tanh(self.conv3(x)))
+        x = self.max_pool1(F.hardtanh(self.conv1(x)))
+        x = self.max_pool2(F.hardtanh(self.conv2(x)))
+        x = self.max_pool3(F.hardtanh(self.conv3(x)))
         x = x.view(-1, x.size()[1]*x.size()[2])
         #x = F.dropout(x)
-        x = self.batch_norm1(F.elu(self.fc1(x)))
-        x = self.batch_norm2(F.elu(self.fc2(x)))
-        x = self.batch_norm3(F.elu(self.fc3(x)))
-        x = self.batch_norm4(F.elu(self.fc4(x), alpha=0.3))
+        x = self.batch_norm1(F.hardtanh(self.fc1(x)))
+        x = self.batch_norm2(F.hardtanh(self.fc2(x)))
+        x = self.batch_norm3(F.hardtanh(self.fc3(x)))
+        x = self.batch_norm4(F.hardtanh(self.fc4(x)))
         # todo: try tanh
-        x = F.elu(self.fc5(x), alpha=0.3)
+        x = F.hardtanh(self.fc5(x))
         # todo: check this softmax
         x = F.tanh(x)
         return x
