@@ -78,7 +78,7 @@ class Train(object):
             self.generator = self._generator
 
         # self.discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0003, betas=(0.5, 0.999))
-        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.005, betas=(0.5, 0.999))
+        self.generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.0001, betas=(0.5, 0.999))
 
     def train_discriminator_autoencoder(self, filename, max_epochs):
         LOG.info("Training generator as autoencoder...")
@@ -240,6 +240,6 @@ if __name__ == "__main__":
     train = Train(samples // width, width, 4096, fft)
     if autoencoder:
         #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", 50)
+        train.train_discriminator_autoencoder("../../data/At_c0_p0_s1000000000_fft2048.hdf5", 30)
     else:
-        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
+        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 30)

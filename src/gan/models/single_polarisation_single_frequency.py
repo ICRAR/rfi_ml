@@ -72,25 +72,28 @@ class Generator(nn.Sequential):
         """
         super(Generator, self).__init__()
 
-        def layer(in_size, out_size, dropout=True):
+        def layer(in_size, out_size, final=False):
             layers = [
                 nn.Linear(in_size, out_size)
             ]
 
-            if dropout:
-                layers.append(nn.Dropout(0.5))
+            if not final:
+                layers.append(nn.ReLU())
+                layers.append(nn.Dropout(0.1))
 
             return layers
 
         def encoder(width):
             return nn.Sequential(
                 *layer(width, width),
-                *layer(width, width, dropout=False),
+                *layer(width, width),
+                *layer(width, width)
             )
         def decoder(width):
             return nn.Sequential(
                 *layer(width, width),
-                *layer(width, width, dropout=False),
+                *layer(width, width),
+                *layer(width, width, final=True),
             )
 
         self.encoder = encoder(width)
