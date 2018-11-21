@@ -26,8 +26,9 @@ GAN model that can accept a data from a single polarisation and single frequency
 Has option to use FFT of samples (2N width per batch)
 """
 
-from torch import nn
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Discriminator(nn.Sequential):
@@ -40,24 +41,50 @@ class Discriminator(nn.Sequential):
         Construct the discriminator
         :param width: Number of samples put through the network per batch.
         """
-        def layer(in_size, out_size):
-            return [
-                nn.Linear(in_size, out_size),
-                nn.ELU(alpha=0.3),
-                nn.BatchNorm1d(out_size),
-                nn.Dropout(p=0.4)
-            ]
 
-        super(Discriminator, self).__init__(
-            *layer(width, width // 2),
-            *layer(width // 2, width // 4),
-            *layer(width // 4, width // 8),
-            *layer(width // 8, width // 16),
-            nn.Linear(width // 16, 2),
-            nn.ELU(alpha=0.3),
-            nn.Softmax(dim=1)
-        )
+        super(Discriminator, self).__init__()
+        self.conv1 = nn.Conv1d(1, 64, kernel_size=128)
+        self.max_pool1 = nn.MaxPool1d(2, stride=2)
 
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=64)
+        self.max_pool2 = nn.MaxPool1d(2, stride=2)
+
+        self.conv3 = nn.Conv1d(128, 256, kernel_size=32)
+        self.max_pool3 = nn.MaxPool1d(2, stride=2)
+
+        self.fc1 = nn.Linear(53248, 13312)
+        self.batch_norm1 = nn.BatchNorm1d(13312)
+
+        self.fc2 = nn.Linear(13312, 3328)
+        self.batch_norm2 = nn.BatchNorm1d(3328)
+
+        self.fc3 = nn.Linear(3328, width // 4)     # output size = 512
+        self.batch_norm3 = nn.BatchNorm1d(width // 4)
+
+        self.fc4 = nn.Linear(width // 4, width // 8) # output size = 256
+        self.batch_norm4 = nn.BatchNorm1d(width // 8)
+
+        self.fc5 = nn.Linear(width // 8, width // 16)
+        self.batch_norm5 = nn.BatchNorm1d(width//16)
+
+        self.fc6 = nn.Linear(width // 16, 2)
+
+    def forward(self, x):
+        x = self.max_pool1(F.elu(self.conv1(x), alpha=0.3))
+        x = self.max_pool2(F.elu(self.conv2(x), alpha=0.3))
+        x = self.max_pool3(F.elu(self.conv3(x), alpha=0.3))
+        x = x.view(-1, x.size()[1]*x.size()[2])
+
+        x = self.batch_norm1(F.elu(self.fc1(x), alpha=0.3))
+        x = self.batch_norm2(F.elu(self.fc2(x), alpha=0.3))
+        x = self.batch_norm3(F.elu(self.fc3(x), alpha=0.3))
+        x = self.batch_norm4(F.elu(self.fc4(x), alpha=0.3))
+        x = self.batch_norm5(F.elu(self.fc5(x), alpha=0.3))
+        # todo: try tanh
+        x = F.elu(self.fc6(x), alpha=0.3)
+        # todo: check this softmax
+        x = F.tanh(x, dim=1)
+        return x
 
 class Generator(nn.Sequential):
     """
