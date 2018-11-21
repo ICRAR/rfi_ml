@@ -105,22 +105,23 @@ class Generator(nn.Sequential):
             ]
 
             if not final:
-                layers.append(nn.ReLU())
+                layers.append(nn.Softsign())
                 layers.append(nn.Dropout(0.1))
 
             return layers
 
+        hidden = int(width * 0.5)
         def encoder(width):
             return nn.Sequential(
-                *layer(width, width),
-                *layer(width, width),
-                *layer(width, width)
+                *layer(width, hidden),
+                *layer(hidden, hidden),
+                *layer(hidden, hidden)
             )
         def decoder(width):
             return nn.Sequential(
-                *layer(width, width),
-                *layer(width, width),
-                *layer(width, width, final=True),
+                *layer(hidden, hidden),
+                *layer(hidden, hidden),
+                *layer(hidden, width, final=True),
             )
 
         self.encoder = encoder(width)
