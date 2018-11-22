@@ -26,7 +26,6 @@ GAN model that can accept a data from a single polarisation and single frequency
 Has option to use FFT of samples (2N width per batch)
 """
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -52,13 +51,13 @@ class Discriminator(nn.Sequential):
         self.conv3 = nn.Conv1d(64, 128, kernel_size=2)
         self.max_pool3 = nn.MaxPool1d(2, stride=2)
 
-        self.fc1 = nn.Linear(16256, width * 2)      # output size = 4096
-        self.batch_norm1 = nn.BatchNorm1d(width*2)
+        self.fc1 = nn.Linear(8064, width)               # output size = 2048
+        self.batch_norm1 = nn.BatchNorm1d(width)
 
-        self.fc2 = nn.Linear(width*2, width // 2)     # output size = 1024
-        self.batch_norm2 = nn.BatchNorm1d(width // 2)
+        self.fc2 = nn.Linear(width, width // 4)       # output size = 512
+        self.batch_norm2 = nn.BatchNorm1d(width // 4)
 
-        self.fc3 = nn.Linear(width // 2, width // 8) # output size = 256
+        self.fc3 = nn.Linear(width // 4, width // 8) # output size = 256
         self.batch_norm3 = nn.BatchNorm1d(width//8)
 
         self.fc4 = nn.Linear(width // 8, width // 16) # output size = 256
@@ -93,6 +92,7 @@ class Generator(nn.Sequential):
         :param width: Number of samples to put through the network per batch.
         :param noise_width: Width of the input noise vector to the network.
         """
+
         super(Generator, self).__init__()
 
         def layer(in_size, out_size, dropout=True):
@@ -116,8 +116,12 @@ class Generator(nn.Sequential):
                 *layer(width, width, dropout=False),
             )
 
-        self.encoder = encoder(width)
-        self.decoder = decoder(width)
+        # split data into real part and imaginary part
+        self.encoderRe = encoder(width//2)
+        self.decoderRe = decoder(width//2)
+
+        self.encoderIm = encoder(width//2)
+        self.decoderIm = decoder(width//2)
 
         self.width = width
         self.is_autoencoder = False
@@ -128,11 +132,13 @@ class Generator(nn.Sequential):
 
         self.apply(init_weights)
 
-    def forward(self, x):
+    def forward(self, x, y):
+        # todo: parse x,y
         if self.is_autoencoder:
-            return self.decoder(self.encoder(x))
+            return {"Re": self.decoderRe(self.encoderRe(x)),
+                    "Im": self.decoderIm(self.encoderIm(y))}
         else:
-            return self.decoder(x)
+            return {"Re": self.decoderRe(x), "Im": self.decoderIm(y)}
 
     def get_noise_width(self):
         """

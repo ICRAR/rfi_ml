@@ -20,16 +20,16 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
-import argparse
+import os
 import sys
 import torch
-import os
+
 base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
 import logging
 from datetime import datetime
-from torch import nn, optim, Tensor, version
+from torch import nn, optim, version
 from gan import USE_CUDA
 from gan.checkpoint import Checkpoint
 from gan.data import Data
@@ -112,13 +112,17 @@ class Train(object):
 
         while epoch < max_epochs:
             for step, (data, _, _) in enumerate(data_loader):
-                data_cuda = data.cuda()
+                LOG.info("Transfering data to GPU...")
+                dataRe_cuda = data[:, :self.width//2].cuda()
+                dataIm_cuda = data[:, self.width//2:].cuda()
+                LOG.info("Done")
                 if ADD_DROPOUT:
                     # Drop out parts of the input, but compute loss on the full input.
-                    out = self.generator(nn.functional.dropout(data_cuda, 0.5))
+                    out = self.generator(nn.functional.dropout(dataRe_cuda, dataIm_cuda, 0.5))
                 else:
-                    out = self.generator(data_cuda)
-                loss = criterion(out.cpu(), data)
+                    out = self.generator(dataRe_cuda, dataIm_cuda)
+                out_cpu = out.cpu()
+                loss = criterion(out_cpu["Re"]+out_cpu["Im"], data)
                 self.generator.zero_grad()
                 loss.backward()
                 self.generator_optimiser.step()
@@ -133,7 +137,8 @@ class Train(object):
             Checkpoint.save_state("generator", self.generator.state_dict(), self.generator_optimiser.state_dict(), epoch)
             vis.plot_training(epoch)
             data, _, _ = iter(data_loader).__next__()
-            vis.test_autoencoder(epoch, self.generator, data_cuda)
+            # todo: concat Re and Im
+            vis.test_autoencoder(epoch, self.generator, torch.cat(dataRe_cuda, dataIm_cuda))
             epoch += 1
 
     def train(self, filename, max_epochs):
@@ -229,39 +234,20 @@ class Train(object):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GAN Training")
-    parser.add_argument('--batch-size', type=int, default=4096, metavar='N', help='input batch size for training (default: 4096)')
-    parser.add_argument('--samples', type=int, default=500000000, metavar='N', help='input sample size for training (default: 500000000)')
-    parser.add_argument('--epochs', type=int, default=25, metavar='N', help='number of epochs to train (default: 25)')
-    parser.add_argument('--use-gpu', action='store_true', default=False, help='use the GPU if it is available')
-    parser.add_argument('--data-path', default='../../data"', help='the path to the data file')
-    parser.add_argument('--data-file', default='At_c0_p0_s1000000000_fft2048.hdf5"', help='the name of the data file')
-    parser.add_argument('--fft', default=True, action='store_false', help="enable fft to the data (default: True)")
-    parser.add_argument('--width', type=int, default=2048, metavar='N', help='width size needed to train')
-    parser.add_argument('--autoencoder', action='store_false', default=True, help='enable autoencoder in generator and discriminator')
-
-    kwargs = vars(parser.parse_args())
-
-    if kwargs['use_gpu'] and torch.cuda.is_available():
-        kwargs['cuda_device_count'] = torch.cuda.device_count()
-        if torch.cuda.get_device_capability(0)[0] > 3:
-            kwargs['using_gpu'] = True
-        else:
-            kwargs['using_gpu'] = False
-    else:
-        kwargs['cuda_device_count'] = 0
-        kwargs['using_gpu'] = False
-    USE_CUDA = kwargs['using_gpu']
-
-    if kwargs['fft']:
+    autoencoder = True
+    samples = 10 // 2  # can't load 16gb of data in you fool
+    width = 2048
+    fft = True
+    USE_CUDA = False
+    if fft:
         # 1000001536, next a largest multiple of width
-        kwargs['samples'] = kwargs['samples'] - (kwargs['samples'] % kwargs['width']) + kwargs['width']
-        kwargs['width'] *= 2  # Double width for fft (real + imag values)
+        samples = samples - (samples % width) + width
+        width *= 2  # Double width for fft (real + imag values)
 
-    train = Train(kwargs['samples'] // kwargs['width'], kwargs['width'], kwargs['batch_size'], kwargs['fft'])
-    #print(train.discriminator)
-    if kwargs['autoencoder']:
-        #train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
-        train.train_discriminator_autoencoder(kwargs['data_path']+'/'+kwargs['data_file'], kwargs['epochs'])
+    train = Train(samples // width, width, 1, fft)
+    print(train.discriminator)
+    if autoencoder:
+        # train.train_discriminator_autoencoder("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)
+        train.train_discriminator_autoencoder("/home/michael/work/rfi_ml/data/At_c0_p0_s1000000000_fft2048.hdf5", 1)
     else:
-        train.train(kwargs['data_path']+'/'+kwargs['data_file'], kwargs['epochs'])
+        train.train("../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5", 50)

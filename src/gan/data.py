@@ -102,6 +102,7 @@ class Data(object):
                                shuffle=True,
                                pin_memory=False,
                                num_workers=0)
+        LOG.info("Noise data is successfully loaded.")
 
     def __iter__(self):
         return zip(self.data, self.noise1, self.noise2)
