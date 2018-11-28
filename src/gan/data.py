@@ -30,12 +30,8 @@ import os
 import numpy as np
 import torch
 import h5py
-import logging
 from torch.utils.data import DataLoader, Dataset
 from lba import LBAFile
-from gan import USE_CUDA
-
-LOG = logging.getLogger(__name__)
 
 
 class NoiseDataset(Dataset):
@@ -75,30 +71,23 @@ class NoiseDataset(Dataset):
 
 class Data(object):
 
-    def __init__(self, filename, samples, width, noise_width, batch_size, **kwargs):
-        self.width = width
-        self.samples = samples
-        self.noise = None  # Fake generated gaussian noise
-        self.data = None  # Data read in from LBA / HDF5 file
+    def __init__(self, config, noise_width):
+        self.config = config
 
-        self.remove_fft_second_half = kwargs.get("remove_fft_second_half", False)
-        self.use_angle_abs = kwargs.get("use_angle_abs", False)
-
-        self.noise1 = DataLoader(NoiseDataset(self.samples, noise_width),
-                                 batch_size=batch_size,
+        self.noise1 = DataLoader(NoiseDataset(self.config.SAMPLES, noise_width),
+                                 batch_size=config.TRAINING_BATCH_SIZE,
                                  shuffle=True,
                                  pin_memory=False,
                                  num_workers=0)
 
-        self.noise2 = DataLoader(NoiseDataset(self.samples, noise_width),
-                                 batch_size=batch_size,
+        self.noise2 = DataLoader(NoiseDataset(self.config.SAMPLES, noise_width),
+                                 batch_size=config.TRAINING_BATCH_SIZE,
                                  shuffle=True,
                                  pin_memory=False,
                                  num_workers=0)
 
-        LOG.info("Loading real noise data...")
-        self.data = DataLoader(self.load_data(filename, self.samples, self.width, 0, 0),
-                               batch_size=batch_size,
+        self.data = DataLoader(self.load_data(config.FILENAME, self.config.SAMPLES, self.config.WIDTH, 0, 0),
+                               batch_size=config.TRAINING_BATCH_SIZE,
                                shuffle=True,
                                pin_memory=False,
                                num_workers=0)
@@ -157,10 +146,12 @@ class Data(object):
 
         return cls.normalise(data)
 
-    def load_hdf5(self, filename, num_samples, width, frequency=None, polarisation=None):
+    def load_hdf5(self, filename, num_samples, width):
         with h5py.File(filename, 'r') as f:
             d = f['data']
             d = d[0:num_samples].astype(np.float32).reshape((num_samples, width))
+
+            """
             if self.remove_fft_second_half:
                 # The second part of the real FFT values is simply mirrored and can be reconstructed anyway,
                 # so remove it from the data.
@@ -169,12 +160,13 @@ class Data(object):
                 mask = np.ones(width, dtype=bool)
                 mask[fft_part_size:fft_part_size * 2] = False
                 d = d[:, mask]
+            """
 
             real = d[:, :width // 2]
             imag = d[:, width // 2:]
 
             # Convert from real, imaginary to abs, angle
-            if self.use_angle_abs:
+            if self.config.USE_ANGLE_ABS:
                 in_angle = np.arctan2(real, imag)
 
                 # Do sqrt(r * r + i * i) in place to avoid memory overheads
@@ -193,19 +185,10 @@ class Data(object):
     def load_data(self, filename, num_samples, width, frequency=None, polarisation=None):
         ext = os.path.splitext(filename)[1]
         if ext == ".hdf5":
-            return self.load_hdf5(filename, num_samples, width, frequency, polarisation)
+            return self.load_hdf5(filename, num_samples, width)
         elif ext == ".lba":
             return self.load_lba(filename, num_samples, width, frequency, polarisation)
 
     def generate_labels(self, num_samples, pattern):
         var = torch.FloatTensor([pattern] * num_samples)
-        return var.cuda() if USE_CUDA else var
-
-
-if __name__ == "__main__":
-    data_loader = Data("../../data/v255ae_At_072_060000.lba", 1000, 4096, 64)
-    count = 0
-    for data, noise1, noise2 in data_loader:
-        count += 1
-        print(data.shape, noise1.shape, noise2.shape)
-    print(count)
+        return var.cuda() if self.config.USE_CUDA else var

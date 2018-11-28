@@ -27,80 +27,49 @@ import datetime
 
 
 class Checkpoint(object):
-    CHECKPOINT_PREFIX = "checkpoint_"
-    MODEL_PREFIX = "model_save_"
-    NUM_CHECKPOINTS = 3
+    CHECKPOINT_PREFIX = 'checkpoint_'
+    MODEL_PREFIX = 'model_save_'
 
-    @classmethod
-    def get_directory(cls, model_type):
-        return os.path.abspath("./{0}{1}".format(cls.CHECKPOINT_PREFIX, model_type))
-
-    @classmethod
-    def get_checkpoint_files(cls, directory):
-        return [os.path.join(directory, f) for f in os.listdir(directory) if f.startswith(cls.MODEL_PREFIX)]
-
-    @classmethod
-    def create_directory(cls, model_type):
-        os.makedirs(cls.get_directory(model_type), exist_ok=True)
-
-    @classmethod
-    def try_restore(cls, checkpoint_folder, model, optimiser):
-        files = cls.get_checkpoint_files(cls.get_directory(checkpoint_folder))
-        if len(files) == 0:
-            return None
-        return Checkpoint.load(max(files, key=lambda f: os.path.getmtime(f))).restore(model, optimiser)
-
-    @classmethod
-    def save_state(cls, model_type, model_state, optimiser_state, epoch):
-        directory = cls.get_directory(model_type)
-        filename = os.path.join(directory, "{0}{1}".format(cls.MODEL_PREFIX, datetime.datetime.now()))
-        # Remove all old checkpoints. Keep the latest NUM_CHECKPOINTS
-        for file in cls.get_checkpoint_files(directory):
-            os.remove(file)
-
-        Checkpoint(model_state, optimiser_state, epoch).save(filename)
-
-    @staticmethod
-    def load(f):
-        """
-        Load a checkpoint from a file
-        :param f: File descriptor or filename
-        :return: Loaded checkpoint
-        """
-        data = torch.load(f)
-        return Checkpoint(data["module_state"], data["optimiser_state"], data["epoch"])
-
-    def __init__(self, module_state=None, optimiser_state=None, epoch=None):
+    def __init__(self, filename, module_state=None, optimiser_state=None, epoch=None):
         """
         Create a new checkpoint
-        :param module_state: Module state returned by module.state_dict()
-        :param optimiser_state: Optimiser state returned by optimiser.state_dict()
-        :param epoch: Training epoch
         """
+        self.directory = os.path.abspath('./{0}{1}'.format(self.CHECKPOINT_PREFIX, filename))
         self.module_state = module_state
         self.optimiser_state = optimiser_state
         self.epoch = epoch
 
-    def save(self, f):
+    def load(self):
+        # Tries to load the latest file in given checkpoint directory
+
+        # Get all files in the directory starting with the model prefix
+        files = self._get_checkpoint_files()
+        if len(files) == 0:
+            return False  # Can't load, no files in there with the prefix
+        latest = max(files, key=lambda f: os.path.getmtime(f))
+
+        data = torch.load(latest)
+        self.module_state = data.get('module_state', None)
+        self.optimiser_state = data.get('optimiser_state', None)
+        self.epoch = data.get('epoch', None)
+        return True
+
+    def save(self):
         """
         Save the checkpoint to a file
         :param f: File descriptor or filename
         """
-        torch.save({
-            "module_state": self.module_state,
-            "optimiser_state": self.optimiser_state,
-            "epoch": self.epoch,
-        }, f)
+        save_path = os.path.join(self.directory, '{0}{1}'.format(self.MODEL_PREFIX, datetime.datetime.now()))
 
-    def restore(self, module, optimiser):
-        """
-        Restore a module and optimiser from this checkpoint
-        :param module: The module to restore
-        :param optimiser: The optimiser to restore
-        :return: The restored epoch
-        """
-        if self.module_state is not None and module is not None:
-            module.load_state_dict(self.module_state)
-        if self.optimiser_state is not None and optimiser is not None:
-            optimiser.load_state_dict(self.optimiser_state)
-        return self.epoch
+        # Remove all old checkpoints and only keep the latest
+        for file in self._get_checkpoint_files():
+            os.remove(file)
+
+        torch.save({
+            'module_state': self.module_state,
+            'optimiser_state': self.optimiser_state,
+            'epoch': self.epoch,
+        }, save_path)
+
+    def _get_checkpoint_files(self):
+        return [os.path.join(self.directory, f) for f in os.listdir(self.directory) if f.startswith(self.MODEL_PREFIX)]

@@ -154,10 +154,11 @@ class Visualiser(object):
         self.g_loss = []
         self.base_directory = base_directory
 
+    def __enter__(self):
         self.queue = JobQueue(num_processes=1)
+        return self
 
-    def __del__(self):
-        print("Waiting for jobs to finish...")
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.queue.join()
 
     def _get_directory(self, epoch):
