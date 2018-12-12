@@ -50,13 +50,11 @@ class Train(object):
         self._discriminator = Discriminator(config)
         self._generator = Generator(config)
 
-        LOG.info("Loading data...")
-        self.data_loader = Data(config)
-
         self.noise_width = self._generator.get_noise_width()
+        self.data_loader = None
 
         if config.USE_CUDA:
-            # self.discriminator = self._discriminator.cuda()
+            self.discriminator = self._discriminator.cuda()
             self.generator = self._generator.cuda()
             LOG.info("Using CUDA")
         else:
@@ -69,7 +67,6 @@ class Train(object):
         criterion = nn.SmoothL1Loss()
         epoch = 0
 
-        LOG.info("Attempting to load generator autoencoder state")
         generator_decoder_checkpoint = Checkpoint("generator_autoencoder")
         if generator_decoder_checkpoint.load():
             self.generator.load_state_dict(generator_decoder_checkpoint.module_state)
@@ -80,6 +77,9 @@ class Train(object):
             LOG.info("Failed to load generator autoencoder state. Training from start")
 
         self._generator.set_autoencoder(True)
+
+        LOG.info("Loading data...")
+        self.data_loader = Data(self.config, self.noise_width)
 
         vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "generator_autoencoder", str(datetime.now()))
         with Visualiser(vis_path) as vis:
@@ -108,23 +108,28 @@ class Train(object):
 
                 vis.plot_training(epoch)
                 data, _, _ = iter(self.data_loader).__next__()
-                vis.test_autoencoder(epoch, self.generator, data_cuda)
+                vis.test_autoencoder(epoch, self.generator, data.cuda())
                 epoch += 1
 
         LOG.info("Saving final generator decoder state")
-        Checkpoint("generator_decoder_complete", self.generator.decoder).save()
+        Checkpoint("generator_decoder_complete", self.generator.decoder.state_dict()).save()
 
     def __call__(self):
         # When training the GAN, we only want to use the decoder part of the generator.
-        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.0001, betas=(0.5, 0.999))
-        discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0003, betas=(0.5, 0.999))
+        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
+        discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0022, betas=(0.5, 0.999))
+
+        factor = lambda epoch: 0.9 ** epoch
+        generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, factor)
+        discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, factor)
+
         criterion = nn.BCELoss()
 
-        LOG.info("Restoring saved model state")
         generator_epoch = 0
         discriminator_epoch = 0
 
-        LOG.info("Attempting to load generator state")
+        # Load in the GAN generator state.
+        # This will actually be the state of the generator decoder only.
         generator_checkpoint = Checkpoint("generator")
         if generator_checkpoint.load():
             self.generator.load_state_dict(generator_checkpoint.module_state)
@@ -132,16 +137,19 @@ class Train(object):
             generator_epoch = generator_checkpoint.epoch
             LOG.info("Successfully loaded generator state at epoch {0}".format(generator_epoch))
         else:
-            LOG.info("Failed to load generator state. Attempting to load final generator decoder state")
+            # Failed to get GAN generator state, so try and find the final state of the
+            # Generator decoder that's saved after pre-training, and load it.
+            LOG.info("Failed to load generator state.")
             generator_decoder_checkpoint = Checkpoint("generator_decoder_complete")
             if generator_decoder_checkpoint.load():
                 LOG.info("Successfully loaded completed generator decoder state")
                 self.generator.decoder.load_state_dict(generator_decoder_checkpoint.module_state)
             else:
+                # Can't find a final decoder state, so we need to train the generator as an autoencoder
+                # then save the final state of the decoder.
                 LOG.info("Failed to load completed generator decoder state. Training now")
                 self._train_generator_autoencoder()
 
-        LOG.info("Attempting to load discriminator state")
         discriminator_checkpoint = Checkpoint("discriminator")
         if discriminator_checkpoint.load():
             self.discriminator.load_state_dict(discriminator_checkpoint.module_state)
@@ -154,6 +162,11 @@ class Train(object):
         epoch = min(generator_epoch, discriminator_epoch)
         LOG.info("Generator epoch: {0}. Discriminator epoch: {1}. Proceeding from earliest epoch: {2}"
                  .format(generator_epoch, discriminator_epoch, epoch))
+
+        if self.data_loader is None:
+            # Data might have been loaded by the generator autoencoder training loop
+            LOG.info("Loading data...")
+            self.data_loader = Data(self.config, self.noise_width)
 
         vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "gan", str(datetime.now()))
         with Visualiser(vis_path) as vis:
@@ -169,16 +182,20 @@ class Train(object):
                     if fake_labels is None or fake_labels.size(0) != batch_size:
                         fake_labels = self.data_loader.generate_labels(batch_size, [0.0, 1.0])
 
+                    data_cuda = data.cuda()
+                    noise1_cuda = noise1.cuda()
+                    noise2_cuda = noise2.cuda()
+
                     # ============= Train the discriminator =============
                     # Pass real noise through first - ideally the discriminator will return [1, 0]
-                    d_output_real = self.discriminator(data)
+                    d_output_real = self.discriminator(data_cuda)
                     # Pass generated noise through - ideally the discriminator will return [0, 1]
-                    d_output_fake1 = self.discriminator(self.generator(noise1))
+                    d_output_fake1 = self.discriminator(self.generator(noise1_cuda))
 
                     # Determine the loss of the discriminator by adding up the real and fake loss and backpropagate
                     d_loss_real = criterion(d_output_real, real_labels)  # How good the discriminator is on real input
                     d_loss_fake = criterion(d_output_fake1, fake_labels)  # How good the discriminator is on fake input
-                    d_loss = 0.5 * (d_loss_real + d_loss_fake)
+                    d_loss = d_loss_real + d_loss_fake
                     self.discriminator.zero_grad()
                     d_loss.backward()
                     discriminator_optimiser.step()
@@ -186,7 +203,7 @@ class Train(object):
                     # =============== Train the generator ===============
                     # Pass in fake noise to the generator and get it to generate "real" noise
                     # Judge how good this noise is with the discriminator
-                    d_output_fake2 = self.discriminator(self.generator(noise2))
+                    d_output_fake2 = self.discriminator(self.generator(noise2_cuda))
 
                     # Determine the loss of the generator using the discriminator and backpropagate
                     g_loss = criterion(d_output_fake2, real_labels)
@@ -201,15 +218,23 @@ class Train(object):
                         # Report data and save checkpoint
                         fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
                         LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step, d_loss_real, d_loss_fake, g_loss))
-                        # self.plots.generate(real, g_output_fake1, g_output_fake2, epoch)
 
-                Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser, epoch)
-                Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser, epoch)
+
+                Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser, epoch).save()
+                Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser, epoch).save()
                 vis.plot_training(epoch)
 
                 data, noise1, noise2 = iter(self.data_loader).__next__()
-                vis.test(epoch, self.discriminator, self.generator, noise1, data)
+                vis.test(epoch, self.discriminator, self.generator, noise1.cuda(), data.cuda())
                 epoch += 1
+
+                generator_scheduler.step(epoch)
+                discriminator_scheduler.step(epoch)
+
+                LOG.info("Learning rates: d {0} g {1}".format(
+                    discriminator_optimiser.param_groups[0]["lr"],
+                    generator_optimiser.param_groups[0]["lr"]
+                ))
 
         LOG.info("Training complete, saving final model state")
         Checkpoint("discriminator_complete", self.discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch).save()

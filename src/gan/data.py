@@ -139,8 +139,8 @@ class Data(object):
 
             # Get data for each batch
             for batch in range(num_samples):
-                if batch % 100 == 0 or batch == num_samples - 1:
-                    LOG.info("Loading real data batch {0} / {1}".format(batch + 1, num_samples))
+                #if batch % 100 == 0 or batch == num_samples - 1:
+                    #LOG.info("Loading real data batch {0} / {1}".format(batch + 1, num_samples))
                 lba_data = lba.read(indexes[batch], width)
                 data[batch] = lba_data[:, frequency_indexes[batch], polarisation_indexes[batch]]
 

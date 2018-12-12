@@ -32,7 +32,7 @@ class Config(object):
 
     defaults = {
         'USE_CUDA':                         Default(True, bool),
-        'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft4096.hdf5', str),
+        'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),
         'MAX_EPOCHS':                       Default(60, int),
         'MAX_GENERATOR_AUTOENCODER_EPOCHS': Default(60, int),
         'SAMPLE_SIZE':                      Default(1024, int),  # 1024 signal samples to train on
@@ -52,7 +52,7 @@ class Config(object):
         config.filename = filename
 
         for k, v in cls.defaults.items():
-            config[k] = v
+            config[k] = v.default
 
         config.write()
 
@@ -65,6 +65,14 @@ class Config(object):
         for k, v in self.defaults.items():
             try:
                 value = config.get(k, v.default)
+                if v.type is bool:
+                    value = value.lower()
+                    if value == 'false':
+                        value = False
+                    elif value == 'true':
+                        value = True
+                    else:
+                        raise Exception()
                 setattr(self, k, v.type(value))
             except:
                 # Failed to convert config value

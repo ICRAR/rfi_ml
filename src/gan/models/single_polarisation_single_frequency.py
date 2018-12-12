@@ -38,13 +38,18 @@ class Discriminator(nn.Sequential):
         """
         Construct the discriminator
         """
-        def layer(in_size, out_size):
-            return [
+        def layer(in_size, out_size, final=False):
+            layers = [
                 nn.Linear(in_size, out_size),
-                nn.ELU(alpha=0.3),
-                nn.BatchNorm1d(out_size),
-                nn.Dropout(p=0.4)
+                nn.Softsign()
             ]
+
+            if final:
+                layers.append(nn.Softmax(dim=1))
+            else:
+                layers.append(nn.Dropout(0.1))
+
+            return layers
 
         width = config.WIDTH
         super(Discriminator, self).__init__(
@@ -52,10 +57,11 @@ class Discriminator(nn.Sequential):
             *layer(width // 2, width // 4),
             *layer(width // 4, width // 8),
             *layer(width // 8, width // 16),
-            nn.Linear(width // 16, 2),
-            nn.ELU(alpha=0.3),
-            nn.Softmax(dim=1)
+            *layer(width // 16, width // 32),
+            *layer(width // 32, width // 64),
+            *layer(width // 64, 2, final=True)
         )
+
 
 class Generator(nn.Sequential):
     """

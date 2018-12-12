@@ -61,6 +61,8 @@ class Checkpoint(object):
         """
         save_path = os.path.join(self.directory, '{0}{1}'.format(self.MODEL_PREFIX, datetime.datetime.now()))
 
+        os.makedirs(self.directory, exist_ok=True)
+
         # Remove all old checkpoints and only keep the latest
         for file in self._get_checkpoint_files():
             os.remove(file)
@@ -72,4 +74,6 @@ class Checkpoint(object):
         }, save_path)
 
     def _get_checkpoint_files(self):
+        if not os.path.exists(self.directory):
+            return []
         return [os.path.join(self.directory, f) for f in os.listdir(self.directory) if f.startswith(self.MODEL_PREFIX)]

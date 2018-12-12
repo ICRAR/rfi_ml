@@ -22,11 +22,14 @@
 #
 
 import os
+import logging
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from jobs import JobQueue
+
+LOG = logging.getLogger(__name__)
 
 
 class PdfPlotter(object):
@@ -40,6 +43,7 @@ class PdfPlotter(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        LOG.info("Writing PDF to {0}".format(self.filename))
         self.pdf.close()
         self.pdf = None
         return self
@@ -113,10 +117,8 @@ class GANTest(object):
 
     def __call__(self, *args, **kwargs):
         with PdfPlotter(os.path.join(self.directory, "plots.pdf")) as pdf:
-            for i in range(min(10, self.gen_out.shape[0])):
+            for i in range(min(10, self.gen_out.shape[0], self.real_out.shape[0])):
                 pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i))
-
-            for i in range(min(10, self.real_out.shape[0])):
                 pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
 
             with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
@@ -182,7 +184,7 @@ class Visualiser(object):
                                   gen_out=out.cpu().data.numpy(),
                                   real_out=real.cpu().data.numpy(),
                                   discriminator_out=discriminator(out).cpu().data.numpy(),
-                                  discriminator_real=discriminator(real).cput().data.numpy()))
+                                  discriminator_real=discriminator(real).cpu().data.numpy()))
         generator.train()
         discriminator.train()
 
