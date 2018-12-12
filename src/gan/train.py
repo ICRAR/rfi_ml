@@ -116,12 +116,11 @@ class Train(object):
 
     def __call__(self):
         # When training the GAN, we only want to use the decoder part of the generator.
-        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
+        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.0022, betas=(0.5, 0.999))
         discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0022, betas=(0.5, 0.999))
 
-        factor = lambda epoch: 0.9 ** epoch
-        generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, factor)
-        discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, factor)
+        generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, lambda epoch: 0.95 ** epoch)
+        discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, lambda epoch: 0.9 ** epoch)
 
         criterion = nn.BCELoss()
 

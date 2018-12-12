@@ -47,7 +47,7 @@ class Discriminator(nn.Sequential):
             if final:
                 layers.append(nn.Softmax(dim=1))
             else:
-                layers.append(nn.Dropout(0.1))
+                layers.append(nn.Dropout(0.5))
 
             return layers
 
@@ -61,7 +61,6 @@ class Discriminator(nn.Sequential):
             *layer(width // 32, width // 64),
             *layer(width // 64, 2, final=True)
         )
-
 
 class Generator(nn.Sequential):
     """
