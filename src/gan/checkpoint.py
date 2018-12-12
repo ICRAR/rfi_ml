@@ -24,6 +24,9 @@
 import torch
 import os
 import datetime
+import logging
+
+LOG = logging.getLogger(__name__)
 
 
 class Checkpoint(object):
@@ -47,6 +50,8 @@ class Checkpoint(object):
         if len(files) == 0:
             return False  # Can't load, no files in there with the prefix
         latest = max(files, key=lambda f: os.path.getmtime(f))
+
+        LOG.info("Loading: {0}".format(latest))
 
         data = torch.load(latest)
         self.module_state = data.get('module_state', None)
