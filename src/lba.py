@@ -28,6 +28,7 @@ Utilities for loading LBA files
 import mmap
 import os
 import sys
+import struct
 import numpy as np
 
 
@@ -41,6 +42,8 @@ class LBAFile(object):
         data = lba.read()
     """
 
+    byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+
     def __init__(self, f):
         """
         :param f: opened file
@@ -48,6 +51,7 @@ class LBAFile(object):
         self.mm = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
         self.header = self._read_header()
         self.size = os.fstat(f.fileno()).st_size
+        self.read_chunk_size = 4096
 
     @property
     def bytes_per_sample(self):
@@ -166,33 +170,54 @@ class LBAFile(object):
 
         samples_output = 0  # Number of samples we dumped into nparray
         samples_read = 0  # Number of samples read, including skipped samples every 32M samples
+
+        # Determine the data type of each sample (2 = uint16, 4 = uint32, 8 = uint64)
+        struct_unpack_type = self.byte_unpack_map[bytes_per_sample]
+        # Cache the structure unpack format for each read.
+        # This is a string containing the format repeated for each sample read
+        struct_unpack_fmt = struct_unpack_type * self.read_chunk_size
         while True:
-            data = self.mm.read(bytes_per_sample)
+            samples_to_read = min(samples - samples_output, self.read_chunk_size)
+            if samples_to_read != self.read_chunk_size:
+                # Different format for reading out the last set of bytes that might not be of the
+                # chunk size cached above
+                struct_unpack_fmt = struct_unpack_type * samples_to_read
+
+            # Read a whole chunk instead of an individual sample for speed
+            data_chunk = self.mm.read(samples_to_read * bytes_per_sample)
+            # Unpack chunk into an array of correctly sized integers
+            samples_chunk = struct.unpack(struct_unpack_fmt, data_chunk)
+
+            # data = self.mm.read(bytes_per_sample)
             # Read one sample into a byte (should be a short between 0 and 65535)
-            intdata = int.from_bytes(data, byteorder=sys.byteorder)
+            # intdata = int.from_bytes(data, byteorder=sys.byteorder)
 
-            if (samples_read + offset) % 32000000 == 0:
-                # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
-                if intdata != 65535:
-                    print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(offset + samples_read))
+            for intdata in samples_chunk:
+                if (samples_read + offset) % 32000000 == 0:
+                    # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
+                    if intdata != 65535:
+                        print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(offset + samples_read))
+                    else:
+                        print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
                 else:
-                    print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
-            else:
-                for frequency in range(num_freq):
-                    # One sample contains data across all frequencies (4), with two polarisations per frequency
-                    # e.g. 16 bit sample: 1001,1010,0101,0000
-                    # freq1: 0000, P0: 00, P1: 11
-                    # freq2: 0101, P0: 01, P1: 01
-                    # freq3: 1010, P0: 10, P1: 10
-                    # freq4: 1001, p0: 01, p1: 10
-                    freqdata = intdata >> frequency * num_freq_bits & freq_mask  # Pull out the low 4 bits for this frequency
-                    nparray[samples_output][frequency][0] = val_map[freqdata & sample_mask]  # Pull out the low two bits for P0
-                    nparray[samples_output][frequency][1] = val_map[freqdata >> num_bits & sample_mask]  # Pull out the high two bits for P1
-                samples_output += 1
+                    for frequency in range(num_freq):
+                        # One sample contains data across all frequencies (4), with two polarisations per frequency
+                        # e.g. 16 bit sample: 1001,1010,0101,0000
+                        # freq1: 0000, P0: 00, P1: 11
+                        # freq2: 0101, P0: 01, P1: 01
+                        # freq3: 1010, P0: 10, P1: 10
+                        # freq4: 1001, p0: 01, p1: 10
+                        freqdata = intdata >> frequency * num_freq_bits & freq_mask  # Pull out the low 4 bits for this frequency
+                        nparray[samples_output][frequency][0] = val_map[freqdata & sample_mask]  # Pull out the low two bits for P0
+                        nparray[samples_output][frequency][1] = val_map[freqdata >> num_bits & sample_mask]  # Pull out the high two bits for P1
+                    samples_output += 1
 
-                if samples_output == samples:
-                    break  # Got everything we need
-            samples_read += 1
+                    if samples_output == samples:
+                        break  # Got everything we need
+                samples_read += 1
+
+            if samples_output == samples:
+                break
 
         return nparray
 
