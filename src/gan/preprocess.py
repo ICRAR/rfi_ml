@@ -186,8 +186,7 @@ class Preprocessor(object):
                 outfile.attrs['size'] = self.fft_window * 2  # Real and Imaginary values, or Abs and Angle values
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
-                    if remaining_ffts == max_ffts or remaining_ffts % 100 == 0:
-                        LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
+                    LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
 
                     ffts_to_read = min(remaining_ffts, 16)
                     samples_to_read = self.fft_window * ffts_to_read
