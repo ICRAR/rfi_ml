@@ -116,11 +116,11 @@ class Train(object):
 
     def __call__(self):
         # When training the GAN, we only want to use the decoder part of the generator.
-        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.0022, betas=(0.5, 0.999))
-        discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.0022, betas=(0.5, 0.999))
+        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
+        discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.003, betas=(0.5, 0.999))
 
-        generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, lambda epoch: 0.95 ** epoch)
-        discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, lambda epoch: 0.9 ** epoch)
+        generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, lambda epoch: 0.97 ** epoch)
+        discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, lambda epoch: 0.97 ** epoch)
 
         criterion = nn.BCELoss()
 
@@ -170,25 +170,25 @@ class Train(object):
         vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "gan", str(datetime.now()))
         with Visualiser(vis_path) as vis:
             self._generator.set_autoencoder(False)
-            real_labels = None
-            fake_labels = None
+            real_labels = None  # all 1s
+            fake_labels = None  # all 0s
 
             while epoch < self.config.MAX_EPOCHS:
                 for step, (data, noise1, noise2) in enumerate(self.data_loader):
                     batch_size = data.size(0)
                     if real_labels is None or real_labels.size(0) != batch_size:
-                        real_labels = self.data_loader.generate_labels(batch_size, [1.0, 0.0])
+                        real_labels = self.data_loader.generate_labels(batch_size, [1.0])
                     if fake_labels is None or fake_labels.size(0) != batch_size:
-                        fake_labels = self.data_loader.generate_labels(batch_size, [0.0, 1.0])
+                        fake_labels = self.data_loader.generate_labels(batch_size, [0.0])
 
                     data_cuda = data.cuda()
                     noise1_cuda = noise1.cuda()
                     noise2_cuda = noise2.cuda()
 
                     # ============= Train the discriminator =============
-                    # Pass real noise through first - ideally the discriminator will return [1, 0]
+                    # Pass real noise through first - ideally the discriminator will return 1 #[1, 0]
                     d_output_real = self.discriminator(data_cuda)
-                    # Pass generated noise through - ideally the discriminator will return [0, 1]
+                    # Pass generated noise through - ideally the discriminator will return 0 #[0, 1]
                     d_output_fake1 = self.discriminator(self.generator(noise1_cuda))
 
                     # Determine the loss of the discriminator by adding up the real and fake loss and backpropagate

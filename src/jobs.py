@@ -46,7 +46,7 @@ class Consumer(Process):
             # noinspection PyBroadException
             try:
                 next_task()
-            except Exception as e:
+            except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 traceback.print_exception(exc_type, exc_value, exc_traceback)
             finally:

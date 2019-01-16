@@ -41,13 +41,15 @@ class Discriminator(nn.Sequential):
         def layer(in_size, out_size, final=False):
             layers = [
                 nn.Linear(in_size, out_size),
-                nn.Softsign()
+
             ]
 
             if final:
-                layers.append(nn.Softmax(dim=1))
+                # layers.append(nn.Softmax(dim=1))
+                layers.append(nn.Sigmoid())  # 0 - 1 for single labels
             else:
-                layers.append(nn.Dropout(0.5))
+                layers.append(nn.Softsign())
+                layers.append(nn.Dropout(0.1))
 
             return layers
 
@@ -59,7 +61,8 @@ class Discriminator(nn.Sequential):
             *layer(width // 8, width // 16),
             *layer(width // 16, width // 32),
             *layer(width // 32, width // 64),
-            *layer(width // 64, 2, final=True)
+            *layer(width // 64, width // 128),
+            *layer(width // 128, 1, final=True)
         )
 
 class Generator(nn.Sequential):
@@ -106,10 +109,20 @@ class Generator(nn.Sequential):
                 *layer(hidden1, width, final=True),
             )
 
+        additional_input_width = int(width * 0.125)
+        additional_hidden1_width = int(width * 0.25)
+        self.additional_input_layer = nn.Sequential(
+            *layer(additional_input_width, additional_hidden1_width),
+            *layer(additional_hidden1_width, hidden3)
+        )
+
+        self.additional_output_layer = nn.Sequential(
+            nn.Softsign()
+        )
         self.encoder = encoder(width)
         self.decoder = decoder(width)
 
-        self.noise_width = hidden3
+        self.noise_width = additional_input_width  # hidden3
         self.is_autoencoder = False
 
         def init_weights(m):
@@ -122,7 +135,7 @@ class Generator(nn.Sequential):
         if self.is_autoencoder:
             return self.decoder(self.encoder(x))
         else:
-            return self.decoder(x)
+            return self.additional_output_layer(self.decoder(self.additional_input_layer(x)))
 
     def get_noise_width(self):
         """

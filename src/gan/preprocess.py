@@ -22,150 +22,188 @@
 #
 
 """
-Preprocess samples from an lba file and generate training data.
+Ouputs the following for each file
+For each combination of polarisation and channel
+ - An array containing the FFTs of that channel. Each FFT is fft_window width, and do not overlap.
+   the resulting array is 2x the length of the fft_window width, and contains the real and imaginary values concatenated
+   in two separate blocks: [real, imaginary], [real, imaginary], ...
+   All of the real values are normalised separately to the imaginary values, and are normalised to between -1 and 1
+   'fft_{polarisation}_{channel}' = [fft reals 1, fft imaginaries 1, fft reals 2, fft imaginaries 2, ...]
+
+ - An array containing the absolute value and phase angle value for each complex number in the resulting FFT. The
+   resulting array is 2x the length of the fft_window width, and contains the absolute and phase angles concatenated
+   in two separate blocks: [absolute, angle], [absolute, angle], ...
+   All of the absolute values are normalised separately to the angle values, and are normalised to between -1 and 1
+   'abs_angle_{polarisation}_{channel}' = [absolute 1, angle 1, absolute 2, angle 2, ...]
+
+Metadata
+ - file the data was loaded from
+ - FFT size used
+ - normalisation factors for each output combination (the min and max values)
+   '{real/imag/abs/angle}_{polarisation}_{channel}_norm' = [min, max]
 """
-import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-print(sys.path)
+
+import os
+import sys
 import argparse
 import logging
 import h5py
 import numpy as np
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+print(sys.path)
+
+import matplotlib.pyplot as plt
+
 from lba import LBAFile
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Convert an LBA file into an easier to load format")
-    parser.add_argument('lba_file', type=str, help="LBA file to convert")
-    parser.add_argument('outfile', type=str, help="Output file to write to")
-    parser.add_argument('--all', default=False, action='store_true', help="Save all data for all channels and polarisations")
-    parser.add_argument('--fft', default=False, action='store_true', help="Perform an FFT on the data and save the FFT output")
-    parser.add_argument('--fft_size', type=int, default=4096, help="The number of samples per FFT to use. This number should also be set in train.py to match whatever number you used here.")
-    parser.add_argument('--samples', type=int, help="Number of samples to read. If using --fft, this will round to the next multiple of --fft_size")
-    parser.add_argument('--channel', type=int, help="Pull out a specific channel from the signal. Can be 0, 1, 2, 3")
-    parser.add_argument('--polarisation', type=int, help='Pull out a specific polarisation from the signal. Can be 0, 1')
-    parser.add_argument('--fft_angles_abs', default=False, action='store_true', help="If present, convert the real and imaginary FFT values to an absolute and phase angle value")
-    return vars(parser.parse_args())
+class Preprocessor(object):
+
+    def __init__(self):
+        self.file = None
+        self.outfile = None
+        self.fft_window = None
+        self.max_ffts = None
+
+    def parse_args(self):
+        """
+        Parse arguments to the script.
+        :return: The arguments as a dict.
+        """
+        parser = argparse.ArgumentParser(description='Convert one or more LBA files into HDF5 files suitable for GAN training')
+        parser.add_argument('file', type=str, help='Input LBA file')
+        parser.add_argument('outfile', type=str, help='Output HDF5 file')
+        parser.add_argument('--fft_window', type=int, help='The FFT window size to use when calculating the FFT of samples', default=2048)
+        parser.add_argument('--max_ffts', type=int, help='Max number of FFTs create. 0 is use all available data', default=0)
+
+        args = vars(parser.parse_args())
+        self.file = args['file']
+        self.outfile = args['outfile']
+        self.fft_window = args['fft_window']
+        self.max_ffts = args['max_ffts']
+
+        if not os.path.exists(self.file):
+            LOG.error('Input file does not exist: {0}'.format(self.file))
+            return False
+
+        if os.path.exists(self.outfile):
+            LOG.error('Output file exists: {0}'.format(self.outfile))
+            return False
+
+        if self.fft_window <= 1:
+            LOG.error('FFT size too small: {0}'.format(self.fft_window))
+            return False
+
+        if self.max_ffts < 0:
+            LOG.error('Max FFTs < 0')
+            return False
+
+        LOG.info('Starting with args: {0}'.format(args))
+
+        return True
+
+    @staticmethod
+    def output_values(values, label, outfile):
+        """
+        Outputs a new set of fft data, either real + imag or absolute + angle.
+        The two input parts are concatenated together into the 'values' parameter
+        :param values: Values to add to the dataset
+        :param label: Dataset name
+        :param outfile: HDF5 file
+        """
+        try:
+            dataset = outfile[label]
+            dataset.resize(dataset.shape[0] + values.shape[0], axis=0)
+            dataset[-values.shape[0]:] = values.astype(np.float32)
+        except:
+            outfile.create_dataset(label, data=values.astype(np.float32), maxshape=(None,))
+
+    @staticmethod
+    def update_attr(value, dataset, label, function):
+        try:
+            if not label in dataset.attrs:
+                dataset.attrs[label] = value
+            else:
+                dataset.attrs[label] = function(dataset.attrs[label], value)
+        except Exception as e:
+            LOG.error("Can't update attr {0}".format(label))
+
+    def output_fft_batch(self, samples, ffts, outfile):
+        for polarisation in range(samples.shape[2]):
+            for channel in range(samples.shape[1]):
+
+                for fft_batch_id in range(ffts):
+                    fft_batch = samples[fft_batch_id * self.fft_window : (fft_batch_id + 1) * self.fft_window]
+
+                    fft = np.fft.fft(fft_batch[:, channel, polarisation])
+
+                    real = fft.real
+                    imag = fft.imag
+                    absolute = np.abs(fft)
+                    angle = np.angle(fft)
+
+                    p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
+                    fft_label = '{0}_real_imag'.format(p_c_identifier)
+                    abs_angle_label = '{0}_abs_angle'.format(p_c_identifier)
+                    self.output_values(np.concatenate((real, imag)), fft_label, outfile)
+                    self.output_values(np.concatenate((absolute, angle)), abs_angle_label, outfile)
+
+                    self.update_attr(np.min(real), outfile[fft_label], 'min_real', min)
+                    self.update_attr(np.max(real), outfile[fft_label], 'max_real', max)
+
+                    self.update_attr(np.min(imag), outfile[fft_label], 'min_imag', min)
+                    self.update_attr(np.max(imag), outfile[fft_label], 'max_imag', max)
+
+                    self.update_attr(np.min(absolute), outfile[abs_angle_label], 'min_absolute', min)
+                    self.update_attr(np.max(absolute), outfile[abs_angle_label], 'max_absolute', max)
+
+                    self.update_attr(np.min(angle), outfile[abs_angle_label], 'min_angle', min)
+                    self.update_attr(np.max(angle), outfile[abs_angle_label], 'max_angle', max)
+
+    def __call__(self):
+        if not self.parse_args():
+            return
+
+        with open(self.file, 'r') as infile:
+            lba = LBAFile(infile)
+
+            max_samples = lba.max_samples
+            max_samples -= max_samples % self.fft_window  # Ignore any samples at the end that won't fill a full fft window.
+
+            if self.max_ffts > 0:
+                max_samples = min(self.fft_window * self.max_ffts, max_samples)
+
+            max_ffts = max_samples // self.fft_window
+
+            samples_read = 0
+            with h5py.File(self.outfile, 'w') as outfile:
+                outfile.attrs['fft_window'] = self.fft_window
+                outfile.attrs['samples'] = max_samples
+                outfile.attrs['fft_count'] = max_ffts
+                outfile.attrs['size'] = self.fft_window * 2  # Real and Imaginary values, or Abs and Angle values
+                while samples_read < max_samples:
+                    remaining_ffts = (max_samples - samples_read) // self.fft_window
+                    if remaining_ffts == max_ffts or remaining_ffts % 100 == 0:
+                        LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
+
+                    ffts_to_read = min(remaining_ffts, 16)
+                    samples_to_read = self.fft_window * ffts_to_read
+
+                    samples = lba.read(samples_read, samples_to_read)
+                    self.output_fft_batch(samples, ffts_to_read, outfile)
+
+                    samples_read += samples_to_read
+
+                LOG.info("Processed {0} out of {0} fft windows".format(max_ffts, max_ffts))
 
 
-def write_raw(outfile, dataset_name, samples):
-    try:
-        dataset = outfile[dataset_name]
-        dataset.resize(dataset.shape[0] + samples.shape[0], axis=0)
-        dataset[-samples.shape[0]:] = samples
-    except:
-        outfile.create_dataset(dataset_name, data=samples, maxshape=(None,))
+if __name__ == '__main__':
+    preprocessor = Preprocessor()
+    preprocessor()
 
 
-def write_fft(outfile, dataset_name, samples, angles_abs):
-    # Given one chunk of samples. FFT it, and write out the real and imaginary components
-    fft = np.fft.fft(samples)
-    out1 = fft.real
-    out2 = fft.imag
-    if angles_abs:
-        # Use the absolute values and phase angles instead of the real and imaginary numbers
-        out1 = np.abs(fft)
-        out2 = np.angle(fft)
-    fft = np.concatenate((out1, out2)).reshape((1, fft.shape[0] * 2))
-    try:
-        dataset = outfile[dataset_name]
-        dataset.resize(dataset.shape[0] + fft.shape[0], axis=0)
-        dataset[-fft.shape[0]:] = fft
-    except:
-        outfile.create_dataset(dataset_name, data=fft, maxshape=(None, fft.shape[1]))
 
 
-def save_all(args):
-    basename, ext = os.path.splitext(args['outfile'])
-    outname = "{0}_all.hdf5".format(basename)
-
-    try:
-        os.remove(outname)
-    except Exception:
-        pass
-
-    with open(args['lba_file'], 'r') as f:
-        lba = LBAFile(f)
-        max_samples = lba.max_samples
-        CHUNK_SIZE = 1024 * 1024 * 10
-        samples_read = 0
-
-        with h5py.File(outname, 'w') as outfile:
-            while samples_read < max_samples:
-                to_read = min(max_samples - samples_read, CHUNK_SIZE)
-                samples = lba.read(samples_read, to_read)
-                samples_read += to_read
-
-                LOG.info("{0} / {1}. {2}%".format(samples_read, max_samples, (samples_read / max_samples) * 100))
-
-                for polarisation in range(0, samples.shape[2]):
-                    polarisation_group = outfile.require_group('polarisation_{0}'.format(polarisation))
-                    for channel in range(0, samples.shape[1]):
-                        channel_group = polarisation_group.require_group('channel_{0}'.format(channel))
-
-                        try:
-                            dataset = channel_group['samples']
-                            dataset.resize(dataset.shape[0] + samples.shape[0], axis=0)
-                            dataset[-samples.shape[0]:] = samples[:, channel, polarisation]
-                        except:
-                            channel_group.create_dataset('samples', data=samples[:, channel, polarisation], maxshape=(None,))
-
-def main():
-    args = parse_args()
-    LOG.info("Starting...")
-
-    if args['all']:
-        save_all(args)
-
-    # Form name for outfile using base name, samples, channel, polarisation
-    basename, ext = os.path.splitext(args['outfile'])
-    if args['fft']:
-        outname = "{0}_c{1}_p{2}_s{3}_fft{4}{5}".format(basename, args['channel'], args['polarisation'], args['samples'], args['fft_size'], ext)
-    else:
-        outname = "{0}_c{1}_p{2}_s{3}{4}".format(basename, args['channel'], args['polarisation'], args['samples'], ext)
-
-    try:
-        os.remove(outname)
-    except Exception:
-        pass
-
-    with open(args['lba_file'], 'r') as f:
-        lba = LBAFile(f)
-
-        max_samples = args['samples']
-        if args['fft']:
-            # If using FFT, set the chunk size to the fft size.
-            # Either read out the next largest multiple of this chunk size above the specified max_samples,
-            # if there's enough samples in the lba file to do this. If not, read the next smallest.
-            CHUNK_SIZE = args['fft_size']
-            max_possible_samples = lba.max_samples - (lba.max_samples % CHUNK_SIZE) # Next smallest multiple of CHUNK_SIZE
-            max_samples = max_samples - (max_samples % CHUNK_SIZE) + CHUNK_SIZE  # Next largest multiple of CHUNK_SIZE
-            max_samples = min(max_possible_samples, max_samples)
-        else:
-            CHUNK_SIZE = 1024 * 1024 * 10
-
-        samples_read = 0
-        channel = args['channel']
-        polarisation = args['polarisation']
-
-        with h5py.File(outname, 'w') as outfile:
-            while samples_read < max_samples:
-                to_read = min(max_samples - samples_read, CHUNK_SIZE)
-                samples = lba.read(samples_read, to_read)[:, channel, polarisation]
-                samples_read += to_read
-
-                LOG.info("{0} / {1}. {2}%".format(samples_read, max_samples, (samples_read / max_samples) * 100))
-
-                if args['fft']:
-                    # Read lba samples, fft them and write out
-                    write_fft(outfile, 'data', samples, args['fft_angles_abs'])
-                else:
-                    # Write samples out raw
-                    write_raw(outfile, 'data', samples)
-
-
-if __name__ == "__main__":
-    main()

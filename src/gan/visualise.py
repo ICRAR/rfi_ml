@@ -120,16 +120,17 @@ class GANTest(object):
             for i in range(min(10, self.gen_out.shape[0], self.real_out.shape[0])):
                 pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i))
                 pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
+                pdf.plot_output([self.real_out[i], self.gen_out[i]], "Combined {0}".format(i))
 
             with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
-                f.write("Fake Expected (Data that came from the generator): [0, 1]\n")
-                for i in range(self.discriminator_out.shape[0]):
-                    f.write("Fake: [{:.2f}, {:.2f}]\n".format(self.discriminator_out[i][0], self.discriminator_out[i][1]))
+                    f.write("Fake Expected (Data that came from the generator): [0]\n")
+                    for i in range(self.discriminator_out.shape[0]):
+                        f.write("Fake: [{:.2f}]\n".format(self.discriminator_out[i][0]))  #, self.discriminator_out[i][1]))
 
-                f.write("\nReal Expected (Data that came from the dataset): [1, 0]\n")
+                    f.write("\nReal Expected (Data that came from the dataset): [1]\n")
 
-                for i in range(self.discriminator_real.shape[0]):
-                    f.write("Real: [{:.2f}, {:.2f}]\n".format(self.discriminator_real[i][0], self.discriminator_real[i][1]))
+                    for i in range(self.discriminator_real.shape[0]):
+                        f.write("Real: [{:.2f}]\n".format(self.discriminator_real[i][0]))  #, self.discriminator_real[i][1]))
 
 
 class PlotLearning(object):
