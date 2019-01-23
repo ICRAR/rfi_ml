@@ -25,7 +25,11 @@ import h5py
 import matplotlib.pyplot as plt
 import itertools
 import numpy as np
+import logging
 from torch.utils.data import Dataset
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+LOG = logging.getLogger(__name__)
 
 
 class HDF5Dataset(Dataset):
@@ -63,7 +67,7 @@ class HDF5Dataset(Dataset):
             return [value] if type(value) is int else value
 
         def get_int_argument(name):
-            value = kwargs.get('max_inputs', None)
+            value = kwargs.get(name, None)
             if value is not None and type(value) != int:
                 raise RuntimeError('{0} should be an integer'.format(name))
             return value
@@ -88,11 +92,20 @@ class HDF5Dataset(Dataset):
         # Size of each NN input contained within this file.
         self.size = get_attribute('size')
 
+        # Size of first part of nn input (real or absolute)
+        self.size_first = get_attribute('size_first')
+
+        # Size of second part of nn input (imaginary or angles)
+        self.second_size = get_attribute('size_second')
+
         # User specified they only want these polarisations
         self.polarisations = get_ints_argument('polarisations', [0, 1])
 
         # User specified they only want these frequencies
         self.frequencies = get_ints_argument('frequencies', [0, 1, 2, 3])
+
+        # User wants the real / abs values to be fully re-created from the half that we have
+        self.full_first = kwargs.get('full_first', False)
 
         # User specified they only want to use this many NN inputs from the entire dataset
         self.max_inputs = get_int_argument('max_inputs')
@@ -101,8 +114,10 @@ class HDF5Dataset(Dataset):
         else:
             if self.max_inputs <= 0:
                 raise RuntimeError('max_input <= 0')
-            # Don't go over the fft_count limit
-            self.max_inputs = min(self.max_inputs, self.fft_count)
+
+            if self.max_inputs > self.fft_count:
+                LOG.warn('max_inputs > fft_count. Clamping to {0}'.format(self.fft_count))
+                self.max_inputs = self.fft_count
 
         # If true, normalise data before returning it
         self.normalise = kwargs.get('normalise', False)
@@ -120,25 +135,37 @@ class HDF5Dataset(Dataset):
         key = 'p{0}_c{1}_{2}'.format(p, c, self.type)
         data_container = self.hdf5[key]
         data = data_container[index * self.size : (index + 1) * self.size]
+        if self.full_first:
+            data = self.rebuild_first_part(data)
+
         if self.normalise:
             data = self.normalise_data(data_container, data)
 
         return p, c, data
 
+    def rebuild_first_part(self, data):
+        first = data[0:self.size_first]
+        return np.concatenate((first, np.flip(first), data[self.size_first:self.size]))
+
     def normalise_data(self, data_container, data):
 
-        half_size = self.size // 2
-        data1 = data[0:half_size]
-        data2 = data[half_size:self.size]
+        first_size = self.size_first * 2 if self.full_first else self.size_first
+        size = first_size + self.second_size
+        data1 = data[0:first_size]
+        data2 = data[first_size:size]
 
         # Normalise to -1 to 1
-        data1 -= data_container.attrs[self.type_minmax_keys[0]]
-        data1 /= data_container.attrs[self.type_minmax_keys[1]]
+        minimum = data_container.attrs[self.type_minmax_keys[0]]
+        maximum = data_container.attrs[self.type_minmax_keys[1]]
+        data1 -= minimum
+        data1 /= maximum - minimum
         data1 *= 2
         data1 -= 1
 
-        data2 -= data_container.attrs[self.type_minmax_keys[2]]
-        data2 /= data_container.attrs[self.type_minmax_keys[3]]
+        minimum = data_container.attrs[self.type_minmax_keys[2]]
+        maximum = data_container.attrs[self.type_minmax_keys[3]]
+        data2 -= minimum
+        data2 /= maximum - minimum
         data2 *= 2
         data2 -= 1
 
@@ -149,11 +176,12 @@ class HDF5Dataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = HDF5Dataset('/home/sam/at_data_2048.hdf5', 'real_imag',
+    dataset = HDF5Dataset('/home/sam/Projects/rfi_ml/src/gan/At.hdf5', 'abs_angle',
                           normalise=True,
-                          max_inputs=1,
-                          polarisations=[0],
-                          frequencies=[0, 2, 3])
+                          full_first=True,
+                          max_inputs=100,
+                          polarisations=[1],
+                          frequencies=[0])
     count_p = {}
     count_c = {}
     for i in range(len(dataset)):

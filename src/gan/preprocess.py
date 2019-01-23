@@ -141,8 +141,10 @@ class Preprocessor(object):
                     fft = np.fft.fft(fft_batch[:, channel, polarisation])
 
                     real = fft.real
+                    real = real[0:real.shape[0] // 2]
                     imag = fft.imag
                     absolute = np.abs(fft)
+                    absolute = absolute[0:absolute.shape[0] // 2]
                     angle = np.angle(fft)
 
                     p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
@@ -151,17 +153,35 @@ class Preprocessor(object):
                     self.output_values(np.concatenate((real, imag)), fft_label, outfile)
                     self.output_values(np.concatenate((absolute, angle)), abs_angle_label, outfile)
 
-                    self.update_attr(np.min(real), outfile[fft_label], 'min_real', min)
-                    self.update_attr(np.max(real), outfile[fft_label], 'max_real', max)
+                    # Store a minimum for all items in a particular channel and polarisation,
+                    # and also store a minimum for all items
+                    minimum = np.min(real)
+                    self.update_attr(minimum, outfile[fft_label], 'min_real', min)
+                    self.update_attr(minimum, outfile, 'min_real', min)
+                    maximum = np.max(real)
+                    self.update_attr(maximum, outfile[fft_label], 'max_real', max)
+                    self.update_attr(maximum, outfile, 'max_real', max)
 
-                    self.update_attr(np.min(imag), outfile[fft_label], 'min_imag', min)
-                    self.update_attr(np.max(imag), outfile[fft_label], 'max_imag', max)
+                    minimum = np.min(imag)
+                    self.update_attr(minimum, outfile[fft_label], 'min_imag', min)
+                    self.update_attr(minimum, outfile, 'min_imag', min)
+                    maximum = np.max(imag)
+                    self.update_attr(maximum, outfile[fft_label], 'max_imag', max)
+                    self.update_attr(maximum, outfile, 'max_imag', max)
 
-                    self.update_attr(np.min(absolute), outfile[abs_angle_label], 'min_absolute', min)
-                    self.update_attr(np.max(absolute), outfile[abs_angle_label], 'max_absolute', max)
+                    minimum = np.min(absolute)
+                    self.update_attr(minimum, outfile[abs_angle_label], 'min_abs', min)
+                    self.update_attr(minimum, outfile, 'min_abs', min)
+                    maximum = np.max(absolute)
+                    self.update_attr(maximum, outfile[abs_angle_label], 'max_abs', max)
+                    self.update_attr(maximum, outfile, 'max_abs', max)
 
-                    self.update_attr(np.min(angle), outfile[abs_angle_label], 'min_angle', min)
-                    self.update_attr(np.max(angle), outfile[abs_angle_label], 'max_angle', max)
+                    minimum = np.min(angle)
+                    self.update_attr(minimum, outfile[abs_angle_label], 'min_angle', min)
+                    self.update_attr(minimum, outfile, 'min_angle', min)
+                    maximum = np.max(angle)
+                    self.update_attr(maximum, outfile[abs_angle_label], 'max_angle', max)
+                    self.update_attr(maximum, outfile, 'max_angle', max)
 
     def __call__(self):
         if not self.parse_args():
@@ -183,12 +203,14 @@ class Preprocessor(object):
                 outfile.attrs['fft_window'] = self.fft_window
                 outfile.attrs['samples'] = max_samples
                 outfile.attrs['fft_count'] = max_ffts
-                outfile.attrs['size'] = self.fft_window * 2  # Real and Imaginary values, or Abs and Angle values
+                outfile.attrs['size_first'] = self.fft_window // 2
+                outfile.attrs['size_second'] = self.fft_window
+                outfile.attrs['size'] = self.fft_window + self.fft_window // 2
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
                     LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
 
-                    ffts_to_read = min(remaining_ffts, 16)
+                    ffts_to_read = min(remaining_ffts, 128)
                     samples_to_read = self.fft_window * ffts_to_read
 
                     samples = lba.read(samples_read, samples_to_read)
