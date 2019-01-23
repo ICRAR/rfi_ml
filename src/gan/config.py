@@ -25,25 +25,28 @@ import os
 from configobj import ConfigObj
 from collections import namedtuple
 
-Default = namedtuple("Default", "default type")
+Default = namedtuple("Default", "default type list_type")
+Default.__new__.__defaults__ = (None, None, None)
 
 
 class Config(object):
 
     defaults = {
-        'USE_CUDA':                         Default(True, bool),
-        'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),
-        'MAX_EPOCHS':                       Default(60, int),
-        'MAX_GENERATOR_AUTOENCODER_EPOCHS': Default(60, int),
-        'SAMPLE_SIZE':                      Default(1024, int),  # 1024 signal samples to train on
-        'TRAINING_BATCH_SIZE':              Default(4096, int),
-        'TRAINING_BATCHES':                 Default(10000, int),
-        'SAMPLES':                          Default(1000000000 // 2, int),  # can't load 16gb of data in you fool
-        'WIDTH':                            Default(2048, int),
-        'FFT':                              Default(True, bool),
-        'USE_ANGLE_ABS':                    Default(False, bool),  # Convert from real, imag input to abs, angle
+        'USE_CUDA':                         Default(True, bool),  # True to train using the GPU, false to use the CPU
+        'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),  # HDF5 file to load data from
+        'DATA_TYPE':                        Default('real_imag', str),  # Type of data to read from the HDF5 files. Either 'real_imag' or 'abs_angle'
+        'MAX_EPOCHS':                       Default(60, int),  # Max number of epochs to train the GAN for
+        'MAX_GENERATOR_AUTOENCODER_EPOCHS': Default(60, int),  # Max number of epochs to train the generator autoencoder for
+        'MAX_SAMPLES':                      Default(0, int),  # Maximum number of inputs to train on. Set to 0 for unlimited
+        'BATCH_SIZE':                       Default(4096, int),  # Number of samples to train on per batch
+        'POLARISATIONS':                    Default([0, 1], list, int),  # Which polarisations should be used?
+        'FREQUENCIES':                      Default([0, 1, 2, 3], list, int),  # Which frequencies should be used?
+        'FULL_FIRST':                       Default(False, bool),  # Set to true use the full set of real / absolute values. False to only use one half.
+        'NORMALISE':                        Default(True, bool),  # Set to true to normalise inputs
         'ADD_DROPOUT':                      Default(True, bool),  # if true, add dropout to the inputs before passing them into the network
-        'ADD_NOISE':                        Default(False, bool)  # if true, add noise to the inputs before passing them into the network
+        'ADD_NOISE':                        Default(False, bool),  # if true, add noise to the inputs before passing them into the network
+        'REQUEUE_EPOCHS':                   Default(0, int),  # if > 0, perform REQUEUE_EPOCHS of training, stop, then run the REQUEUE_SCRIPT
+        'REQUEUE_SCRIPT':                   Default("", str)  # if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
     }
 
     @classmethod
@@ -73,13 +76,10 @@ class Config(object):
                         value = True
                     else:
                         raise Exception()
+                elif v.type is list:
+                    # Convert all to the list type
+                    value = map(v.list_type, value)
                 setattr(self, k, v.type(value))
             except:
                 # Failed to convert config value
                 raise Exception("Failed to convert config value to correct type: {0} {1}".format(k, v.type))
-
-        if self.FFT:
-            # 1000001536, next a largest multiple of width
-            self.SAMPLES = self.SAMPLES - (self.SAMPLES % self.WIDTH) + self.WIDTH
-            self.WIDTH *= 2  # Double width for fft (real + imag values)
-            self.SAMPLES //= self.WIDTH  # samples should be split into WIDTH long chunks when using FFT

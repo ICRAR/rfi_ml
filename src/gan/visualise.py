@@ -59,7 +59,7 @@ class PdfPlotter(object):
         fig.clear()
         plt.close(fig)
 
-    def plot_output(self, data, title):
+    def plot_output(self, data, title, size_first):
 
         def plot_single(data, title):
             plt.title(title)
@@ -67,11 +67,10 @@ class PdfPlotter(object):
 
         def plot_split(data, title):
             if self.split:
-                length = data.shape[0] // 2
                 plt.subplot(1, 2, 1)
-                plot_single(data[:length], title[0])
+                plot_single(data[:size_first], title[0])
                 plt.subplot(1, 2, 2)
-                plot_single(data[length:], title[1])
+                plot_single(data[size_first:], title[1])
                 plt.tight_layout()
             else:
                 plot_single(data, title)
@@ -90,8 +89,9 @@ class PdfPlotter(object):
 
 
 class AutoEncoderTest(object):
-    def __init__(self, directory, out, real):
+    def __init__(self, directory, size_first, out, real):
         self.directory = directory
+        self.size_first = size_first
         self.out = out
         self.real = real
 
@@ -100,16 +100,17 @@ class AutoEncoderTest(object):
         with PdfPlotter(os.path.join(self.directory, "plots.pdf"), split=True) as pdf:
             for i in range(min(5, self.out.shape[0])):
                 base = "Generator Output {0}".format(i)
-                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")], self.size_first)
                 base = "Real Output {0}".format(i)
-                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")], self.size_first)
                 base = "Output Real Comparison {0}".format(i)
-                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")], self.size_first)
 
 
 class GANTest(object):
-    def __init__(self, directory, gen_out, real_out, discriminator_out, discriminator_real):
+    def __init__(self, directory, size_first, gen_out, real_out, discriminator_out, discriminator_real):
         self.directory = directory
+        self.size_first = size_first
         self.gen_out = gen_out
         self.real_out = real_out
         self.discriminator_out = discriminator_out
@@ -118,9 +119,9 @@ class GANTest(object):
     def __call__(self, *args, **kwargs):
         with PdfPlotter(os.path.join(self.directory, "plots.pdf")) as pdf:
             for i in range(min(10, self.gen_out.shape[0], self.real_out.shape[0])):
-                pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i))
-                pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
-                pdf.plot_output([self.real_out[i], self.gen_out[i]], "Combined {0}".format(i))
+                pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i), self.size_first)
+                pdf.plot_output(self.real_out[i], "Real Data {0}".format(i), self.size_first)
+                pdf.plot_output([self.real_out[i], self.gen_out[i]], "Combined {0}".format(i), self.size_first)
 
             with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
                     f.write("Fake Expected (Data that came from the generator): [0]\n")
@@ -177,11 +178,12 @@ class Visualiser(object):
     def step_autoencoder(self, loss):
         self.g_loss.append(loss)
 
-    def test(self, epoch, discriminator, generator, noise, real):
+    def test(self, epoch, size_first, discriminator, generator, noise, real):
         generator.eval()
         discriminator.eval()
         out = generator(noise)
         self.queue.submit(GANTest(directory=self._get_directory(epoch),
+                                  size_first=size_first,
                                   gen_out=out.cpu().data.numpy(),
                                   real_out=real.cpu().data.numpy(),
                                   discriminator_out=discriminator(out).cpu().data.numpy(),
@@ -189,9 +191,10 @@ class Visualiser(object):
         generator.train()
         discriminator.train()
 
-    def test_autoencoder(self, epoch, generator, real):
+    def test_autoencoder(self, epoch, size_first, generator, real):
         generator.eval()
         self.queue.submit(AutoEncoderTest(directory=self._get_directory(epoch),
+                                          size_first=size_first,
                                           out=generator(real).cpu().data.numpy(),
                                           real=real.cpu().data.numpy()))
         generator.train()

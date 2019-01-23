@@ -34,7 +34,7 @@ class Discriminator(nn.Sequential):
     Determines whether the provided input is actually RFI noise
     """
 
-    def __init__(self, config):
+    def __init__(self, width):
         """
         Construct the discriminator
         """
@@ -53,7 +53,6 @@ class Discriminator(nn.Sequential):
 
             return layers
 
-        width = config.WIDTH
         super(Discriminator, self).__init__(
             *layer(width, width // 2),
             *layer(width // 2, width // 4),
@@ -73,7 +72,7 @@ class Generator(nn.Sequential):
     along with a random noise vector of inputs to the hidden layer
     """
 
-    def __init__(self, config):
+    def __init__(self, width):
         """
         Construct the generator
         :param width: Number of samples to put through the network per batch.
@@ -92,7 +91,6 @@ class Generator(nn.Sequential):
 
             return layers
 
-        width = config.WIDTH
         hidden1 = int(width * 0.833)
         hidden2 = int(width * 0.666)
         hidden3 = int(width * 0.5)
@@ -127,7 +125,7 @@ class Generator(nn.Sequential):
 
         def init_weights(m):
             if type(m) is nn.Linear:
-                nn.init.xavier_uniform(m.weight)
+                nn.init.xavier_uniform_(m.weight)
 
         self.apply(init_weights)
 

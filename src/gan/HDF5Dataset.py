@@ -33,6 +33,10 @@ LOG = logging.getLogger(__name__)
 
 
 class HDF5Dataset(Dataset):
+    """
+    Creates a dataset to loop over all of the NN inputs contained within an HDF5 file
+    that was exported from an LBA file using 'preprocess.py'
+    """
 
     valid_types = {'abs_angle', 'real_imag'}
 
@@ -43,6 +47,15 @@ class HDF5Dataset(Dataset):
 
     def __init__(self, filename, data_type, **kwargs):
         """
+        Initialises the HDF5 dataset
+        :param filename: The filename to read the dataset from
+        :param data_type: What type of data should be read from the file? 'angle_abs' or 'real_imag'
+        :param kwargs:
+            polarisations: A list of polarisations (0 to 1) that should be included in the data
+            frequencies: A list of frequencies (0 to 3) that should be included in the data
+            max_inputs: Maximum number of inputs to get per polarisation, frequency pair
+            full_first: Reconstruct the full real / absolute values if set to true
+            normalise: Normalise the data as per the dataset min and max values in the HDF5 file
         """
         super(HDF5Dataset, self).__init__()
 
@@ -96,7 +109,7 @@ class HDF5Dataset(Dataset):
         self.size_first = get_attribute('size_first')
 
         # Size of second part of nn input (imaginary or angles)
-        self.second_size = get_attribute('size_second')
+        self.size_second = get_attribute('size_second')
 
         # User specified they only want these polarisations
         self.polarisations = get_ints_argument('polarisations', [0, 1])
@@ -123,12 +136,24 @@ class HDF5Dataset(Dataset):
         self.normalise = kwargs.get('normalise', False)
 
     def __del__(self):
+        """
+        Close the dataset
+        """
         self.close()
 
     def __len__(self):
+        """
+        :return: Number of inputs in the dataset
+        """
         return self.max_inputs * len(self.polarisations) * len(self.frequencies)
 
     def __getitem__(self, index):
+        """
+        Gets an NN input from the dataset. This will iterate over all of the selected
+        polarisations and frequencies.
+        :param index: The index to get.
+        :return: A single NN input
+        """
         length = len(self)
         p, index = self.get_index(index, length, self.polarisations)
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
@@ -141,16 +166,56 @@ class HDF5Dataset(Dataset):
         if self.normalise:
             data = self.normalise_data(data_container, data)
 
-        return p, c, data
+        return data
+
+    def get_configuration(self):
+        return {
+            'fft_count': self.fft_count,
+            'fft_window': self.fft_window,
+            'samples': self.samples,
+            'size': self.size,
+            'size_first': self.size_first,
+            'size_second': self.size_second,
+            'polarisations': self.polarisations,
+            'frequencies': self.frequencies,
+            'full_first': self.full_first,
+            'max_inputs': self.max_inputs,
+            'normalise': self.normalise,
+            'type': self.type,
+            'input_size': self.get_input_size()
+        }
+
+    def get_polarisation_and_channel(self, index):
+        """
+        Get the polarisation and channel of the input that would be returned from the
+        specified index.
+        :param index: The index to get the polarisation and channel from
+        :return: The polarisation and channel as a tuple
+        """
+        length = len(self)
+        p, index = self.get_index(index, length, self.polarisations)
+        c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
+        return p, c
 
     def rebuild_first_part(self, data):
+        """
+        Reconstructs the entire real / absolute values from the half values that are included in the
+        HDF5 file
+        :param data: Data to reconstruct
+        :return: Data with reconstructed first half
+        """
         first = data[0:self.size_first]
         return np.concatenate((first, np.flip(first), data[self.size_first:self.size]))
 
     def normalise_data(self, data_container, data):
-
+        """
+        Normalise the provided data with the min and max values in the HDF5 dataset
+        :param data_container: The HDF5 dataset that contains min and max values
+        :param data: The data to normalise
+        :return: Normalised data
+        """
         first_size = self.size_first * 2 if self.full_first else self.size_first
-        size = first_size + self.second_size
+        size = first_size + self.size_second
         data1 = data[0:first_size]
         data2 = data[first_size:size]
 
@@ -172,7 +237,22 @@ class HDF5Dataset(Dataset):
         return np.concatenate((data1, data2), axis=0)
 
     def close(self):
+        """
+        Close the dataset
+        """
         self.hdf5.close()
+
+    def get_input_size(self):
+        """
+        :return: The size of each input that this dataset will return
+        """
+        return self.get_input_size_first() + self.size_second
+
+    def get_input_size_first(self):
+        """
+        :return: The size of the first part of the input (real / absolute)
+        """
+        return self.size_first * 2 if self.full_first else self.size_first
 
 
 if __name__ == '__main__':

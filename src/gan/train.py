@@ -27,6 +27,7 @@ base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
 import logging
+import subprocess
 from datetime import datetime
 from torch import nn, optim, version
 from gan.checkpoint import Checkpoint
@@ -35,10 +36,20 @@ from gan.models.single_polarisation_single_frequency import Generator, Discrimin
 from gan.visualise import Visualiser
 from gan.config import Config
 
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 print(version.cuda)
+
+
+"""
+Config file specifies number of epochs to train per instance.
+After a single training run of that number of epochs finishes, it should requeue itself 
+until all the training epochs are complete.
+"""
 
 
 class Train(object):
@@ -46,17 +57,23 @@ class Train(object):
     def __init__(self, config):
         self.config = config
 
-        LOG.info("Creating models...")
-        self._discriminator = Discriminator(config)
-        self._generator = Generator(config)
+        LOG.info("Creating Data Loader...")
+        self.data_loader = Data(config.FILENAME, config.DATA_TYPE, config.BATCH_SIZE,
+                                polarisations=config.POLARISATIONS,  # Polarisations to use
+                                frequencies=config.FREQUENCIES,  # Frequencies to use
+                                max_inputs=config.MAX_SAMPLES,  # Max inputs per polarisation and frequency to use
+                                full_first=config.FULL_FIRST,  # Mirror real / absolute values instead of only using the first half
+                                normalise=config.NORMALISE)  # Normalise inputs
 
-        self.noise_width = self._generator.get_noise_width()
-        self.data_loader = None
+        width = self.data_loader.get_input_size()
+        LOG.info("Creating models with input width {0}".format(width))
+        self._discriminator = Discriminator(width)
+        self._generator = Generator(width)
 
         if config.USE_CUDA:
+            LOG.info("Using CUDA")
             self.discriminator = self._discriminator.cuda()
             self.generator = self._generator.cuda()
-            LOG.info("Using CUDA")
         else:
             LOG.info("Using CPU")
             self.discriminator = self._discriminator
@@ -69,21 +86,24 @@ class Train(object):
 
         generator_decoder_checkpoint = Checkpoint("generator_autoencoder")
         if generator_decoder_checkpoint.load():
-            self.generator.load_state_dict(generator_decoder_checkpoint.module_state)
-            optimiser.load_state_dict(generator_decoder_checkpoint.optimiser_state)
-            epoch = generator_decoder_checkpoint.epoch
-            LOG.info("Successfully loaded generator autoencoder state at epoch {0}".format(epoch))
+            epoch = self.load_state(generator_decoder_checkpoint, self.generator, optimiser)
+            if epoch is None:
+                return False
+            else:
+                LOG.info("Successfully loaded generator autoencoder state at epoch {0}".format(epoch))
         else:
             LOG.info("Failed to load generator autoencoder state. Training from start")
 
         self._generator.set_autoencoder(True)
 
-        LOG.info("Loading data...")
-        self.data_loader = Data(self.config, self.noise_width)
-
         vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "generator_autoencoder", str(datetime.now()))
         with Visualiser(vis_path) as vis:
+            epochs_complete = 0
             while epoch < self.config.MAX_GENERATOR_AUTOENCODER_EPOCHS:
+
+                if self.check_requeue(epochs_complete):
+                    return False  # Requeue needed and training not complete
+
                 for step, (data, _, _) in enumerate(self.data_loader):
                     data_cuda = data.cuda()
                     if self.config.ADD_DROPOUT:
@@ -104,15 +124,40 @@ class Train(object):
                         fmt = "Epoch [{0}/{1}], Step[{2}], loss: {3:.4f}"
                         LOG.info(fmt.format(epoch + 1, self.config.MAX_GENERATOR_AUTOENCODER_EPOCHS, step, loss))
 
+                epoch += 1
+                epochs_complete += 1
+
                 Checkpoint("generator_autoencoder", self.generator.state_dict(), optimiser.state_dict(), epoch).save()
 
                 vis.plot_training(epoch)
                 data, _, _ = iter(self.data_loader).__next__()
-                vis.test_autoencoder(epoch, self.generator, data.cuda())
-                epoch += 1
+                vis.test_autoencoder(epoch, self.data_loader.get_input_size_first(), self.generator, data.cuda())
 
         LOG.info("Saving final generator decoder state")
         Checkpoint("generator_decoder_complete", self.generator.decoder.state_dict()).save()
+        return True  # Training complete
+
+    def check_requeue(self, epochs_complete):
+        if self.config.REQUEUE_EPOCHS > 0:
+            if epochs_complete >= self.config.REQUEUE_EPOCHS:
+                # We've completed enough epochs for this instance. We need to kill it and requeue
+                LOG.info("REQUEUE_EPOCHS of {0} met, calling REQUEUE_SCRIPT".format(self.config.REQUEUE_EPOCHS))
+                subprocess.call(self.config.REQUEUE_SCRIPT, shell=True)
+                return True  # Requeue performed
+        return False  # No requeue needed
+
+    def load_state(self, checkpoint, module, optimiser=None):
+        try:
+            module.load_state_dict(checkpoint.module_state)
+            if optimiser is not None:
+                optimiser.load_state_dict(checkpoint.optimiser_state)
+            return checkpoint.epoch
+        except RuntimeError as e:
+            LOG.exception("Error loading module state. This is most likely an input size mismatch. Please delete the old module saved state, or change the input size")
+            return None
+
+    def close(self):
+        self.data_loader.close()
 
     def __call__(self):
         # When training the GAN, we only want to use the decoder part of the generator.
@@ -131,30 +176,38 @@ class Train(object):
         # This will actually be the state of the generator decoder only.
         generator_checkpoint = Checkpoint("generator")
         if generator_checkpoint.load():
-            self.generator.load_state_dict(generator_checkpoint.module_state)
-            generator_optimiser.load_state_dict(generator_checkpoint.optimiser_state)
-            generator_epoch = generator_checkpoint.epoch
-            LOG.info("Successfully loaded generator state at epoch {0}".format(generator_epoch))
+            generator_epoch = self.load_state(generator_checkpoint, self.generator, generator_optimiser)
+            if generator_epoch is None:
+                return
+            else:
+                LOG.info("Successfully loaded generator state at epoch {0}".format(generator_epoch))
         else:
             # Failed to get GAN generator state, so try and find the final state of the
             # Generator decoder that's saved after pre-training, and load it.
             LOG.info("Failed to load generator state.")
             generator_decoder_checkpoint = Checkpoint("generator_decoder_complete")
             if generator_decoder_checkpoint.load():
-                LOG.info("Successfully loaded completed generator decoder state")
-                self.generator.decoder.load_state_dict(generator_decoder_checkpoint.module_state)
+                if self.load_state(generator_decoder_checkpoint, self.generator.decoder) is None:
+                    return
+                else:
+                    LOG.info("Successfully loaded completed generator decoder state")
             else:
                 # Can't find a final decoder state, so we need to train the generator as an autoencoder
                 # then save the final state of the decoder.
                 LOG.info("Failed to load completed generator decoder state. Training now")
-                self._train_generator_autoencoder()
+                if self._train_generator_autoencoder():
+                    LOG.info("Generator autoencoder training completed successfully.")
+                else:
+                    LOG.info("Generator autoencoder training incomplete.")
+                    return
 
         discriminator_checkpoint = Checkpoint("discriminator")
         if discriminator_checkpoint.load():
-            self.discriminator.load_state_dict(discriminator_checkpoint.module_state)
-            discriminator_optimiser.load_state_dict(discriminator_checkpoint.optimiser_state)
-            discriminator_epoch = discriminator_checkpoint.epoch
-            LOG.info("Successfully loaded discriminator state at epoch {0}".format(discriminator_epoch))
+            discriminator_epoch = self.load_state(discriminator_checkpoint, self.discriminator, discriminator_optimiser)
+            if discriminator_epoch is None:
+                return
+            else:
+                LOG.info("Successfully loaded discriminator state at epoch {0}".format(discriminator_epoch))
         else:
             LOG.info("Failed to load discriminator state.")
 
@@ -162,24 +215,23 @@ class Train(object):
         LOG.info("Generator epoch: {0}. Discriminator epoch: {1}. Proceeding from earliest epoch: {2}"
                  .format(generator_epoch, discriminator_epoch, epoch))
 
-        if self.data_loader is None:
-            # Data might have been loaded by the generator autoencoder training loop
-            LOG.info("Loading data...")
-            self.data_loader = Data(self.config, self.noise_width)
-
         vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "gan", str(datetime.now()))
         with Visualiser(vis_path) as vis:
             self._generator.set_autoencoder(False)
             real_labels = None  # all 1s
             fake_labels = None  # all 0s
-
+            epochs_complete = 0
             while epoch < self.config.MAX_EPOCHS:
+
+                if self.check_requeue(epochs_complete):
+                    return  # Requeue needed and training not complete
+
                 for step, (data, noise1, noise2) in enumerate(self.data_loader):
                     batch_size = data.size(0)
                     if real_labels is None or real_labels.size(0) != batch_size:
-                        real_labels = self.data_loader.generate_labels(batch_size, [1.0])
+                        real_labels = self.data_loader.generate_labels(batch_size, [1.0], self.config.USE_CUDA)
                     if fake_labels is None or fake_labels.size(0) != batch_size:
-                        fake_labels = self.data_loader.generate_labels(batch_size, [0.0])
+                        fake_labels = self.data_loader.generate_labels(batch_size, [0.0], self.config.USE_CUDA)
 
                     data_cuda = data.cuda()
                     noise1_cuda = noise1.cuda()
@@ -218,14 +270,15 @@ class Train(object):
                         fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
                         LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step, d_loss_real, d_loss_fake, g_loss))
 
+                epoch += 1
+                epochs_complete += 1
 
                 Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser, epoch).save()
                 Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser, epoch).save()
                 vis.plot_training(epoch)
 
                 data, noise1, noise2 = iter(self.data_loader).__next__()
-                vis.test(epoch, self.discriminator, self.generator, noise1.cuda(), data.cuda())
-                epoch += 1
+                vis.test(epoch, self.data_loader.get_input_size_first(), self.discriminator, self.generator, noise1.cuda(), data.cuda())
 
                 generator_scheduler.step(epoch)
                 discriminator_scheduler.step(epoch)
@@ -243,3 +296,4 @@ class Train(object):
 if __name__ == "__main__":
     train = Train(Config("gan_config.settings"))
     train()
+    train.close()
