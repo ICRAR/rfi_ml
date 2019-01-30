@@ -117,7 +117,7 @@ class Preprocessor(object):
             dataset.resize(dataset.shape[0] + values.shape[0], axis=0)
             dataset[-values.shape[0]:] = values.astype(np.float32)
         except:
-            outfile.create_dataset(label, data=values.astype(np.float32), maxshape=(None,))
+            outfile.create_dataset(label, data=values.astype(np.float32), maxshape=(None,), chunks=True)
 
     @staticmethod
     def update_attr(value, dataset, label, function):

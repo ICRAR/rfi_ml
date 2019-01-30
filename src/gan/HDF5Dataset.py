@@ -59,7 +59,7 @@ class HDF5Dataset(Dataset):
         """
         super(HDF5Dataset, self).__init__()
 
-        self.hdf5 = h5py.File(filename, 'r')
+        self.hdf5 = h5py.File(filename, 'r', swmr=True, libver='latest', rdcc_nbytes=1000000000)  # 1 GB
 
         def get_attribute(name):
             value = self.hdf5.attrs.get(name, None)

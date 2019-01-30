@@ -262,16 +262,15 @@ class Train(object):
 
                     vis.step(d_loss_real.item(), d_loss_fake.item(), g_loss.item())
 
-                    if step % 5 == 0:
-                        # Report data and save checkpoint
-                        fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
-                        LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step, d_loss_real, d_loss_fake, g_loss))
+                    # Report data and save checkpoint
+                    fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
+                    LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step, d_loss_real, d_loss_fake, g_loss))
 
                 epoch += 1
                 epochs_complete += 1
 
-                Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser, epoch).save()
-                Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser, epoch).save()
+                Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch).save()
+                Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser.state_dict(), epoch).save()
                 vis.plot_training(epoch)
 
                 data, noise1, _ = iter(self.data_loader).__next__()
