@@ -52,13 +52,13 @@ class Data(object):
                                pin_memory=False,
                                num_workers=0)
 
-        self.noise1 = DataLoader(NoiseDataset(self.get_input_size()),
+        self.noise1 = DataLoader(NoiseDataset(self.get_input_size(), len(self.hdf5_dataset)),
                                  batch_size=batch_size,
                                  shuffle=True,
                                  pin_memory=False,
                                  num_workers=0)
 
-        self.noise2 = DataLoader(NoiseDataset(self.get_input_size()),
+        self.noise2 = DataLoader(NoiseDataset(self.get_input_size(), len(self.hdf5_dataset)),
                                  batch_size=batch_size,
                                  shuffle=True,
                                  pin_memory=False,

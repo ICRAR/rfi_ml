@@ -106,12 +106,14 @@ class Train(object):
                     return False  # Requeue needed and training not complete
 
                 for step, (data, _, _) in enumerate(self.data_loader):
-                    data_cuda = data.cuda()
+                    if self.config.USE_CUDA:
+                        data = data.cuda()
+
                     if self.config.ADD_DROPOUT:
                         # Drop out parts of the input, but compute loss on the full input.
-                        out = self.generator(nn.functional.dropout(data_cuda, 0.5))
+                        out = self.generator(nn.functional.dropout(data, 0.5))
                     else:
-                        out = self.generator(data_cuda)
+                        out = self.generator(data)
 
                     loss = criterion(out.cpu(), data)
                     self.generator.zero_grad()
@@ -227,15 +229,16 @@ class Train(object):
                     if fake_labels is None or fake_labels.size(0) != batch_size:
                         fake_labels = self.data_loader.generate_labels(batch_size, [0.0], self.config.USE_CUDA)
 
-                    data_cuda = data.cuda()
-                    noise1_cuda = noise1.cuda()
-                    noise2_cuda = noise2.cuda()
+                    if self.config.USE_CUDA:
+                        data = data.cuda()
+                        noise1 = noise1.cuda()
+                        noise2 = noise2.cuda()
 
                     # ============= Train the discriminator =============
                     # Pass real noise through first - ideally the discriminator will return 1 #[1, 0]
-                    d_output_real = self.discriminator(data_cuda)
+                    d_output_real = self.discriminator(data)
                     # Pass generated noise through - ideally the discriminator will return 0 #[0, 1]
-                    d_output_fake1 = self.discriminator(self.generator(noise1_cuda))
+                    d_output_fake1 = self.discriminator(self.generator(noise1))
 
                     # Determine the loss of the discriminator by adding up the real and fake loss and backpropagate
                     d_loss_real = criterion(d_output_real, real_labels)  # How good the discriminator is on real input
@@ -248,7 +251,7 @@ class Train(object):
                     # =============== Train the generator ===============
                     # Pass in fake noise to the generator and get it to generate "real" noise
                     # Judge how good this noise is with the discriminator
-                    d_output_fake2 = self.discriminator(self.generator(noise2_cuda))
+                    d_output_fake2 = self.discriminator(self.generator(noise2))
 
                     # Determine the loss of the generator using the discriminator and backpropagate
                     g_loss = criterion(d_output_fake2, real_labels)
@@ -271,8 +274,11 @@ class Train(object):
                 Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser, epoch).save()
                 vis.plot_training(epoch)
 
-                data, noise1, noise2 = iter(self.data_loader).__next__()
-                vis.test(epoch, self.data_loader.get_input_size_first(), self.discriminator, self.generator, noise1.cuda(), data.cuda())
+                data, noise1, _ = iter(self.data_loader).__next__()
+                if self.config.USE_CUDA:
+                    data = data.cuda()
+                    noise1 = noise1.cuda()
+                vis.test(epoch, self.data_loader.get_input_size_first(), self.discriminator, self.generator, noise1, data)
 
                 generator_scheduler.step(epoch)
                 discriminator_scheduler.step(epoch)

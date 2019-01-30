@@ -26,12 +26,13 @@ from torch.utils.data import Dataset
 
 
 class NoiseDataset(Dataset):
-    def __init__(self, width):
+    def __init__(self, width, length):
         self.width = width
+        self.length = length
 
     def __getitem__(self, item):
         data = np.random.normal(0, 1.0, self.width).astype(np.float32)
         return data
 
     def __len__(self):
-        return 1  # Doesn't matter as we simply re-generate the noise each time
+        return self.length

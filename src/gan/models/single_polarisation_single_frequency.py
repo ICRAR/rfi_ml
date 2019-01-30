@@ -111,7 +111,7 @@ class Generator(nn.Sequential):
             )
 
         self.gan_input_layer = nn.Sequential(
-            *layer(hidden3, width)
+            *layer(width, hidden3)
         )
         self.encoder = encoder(width)
         self.decoder = decoder(width)
@@ -129,7 +129,8 @@ class Generator(nn.Sequential):
         if self.is_autoencoder:
             return self.decoder(self.encoder(x))
         else:
-            return self.decoder(self.gan_input_layer(x))
+            x = self.gan_input_layer(x)
+            return self.decoder(x)
 
     def get_noise_width(self):
         """
