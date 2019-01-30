@@ -83,3 +83,7 @@ class Config(object):
             except:
                 # Failed to convert config value
                 raise Exception("Failed to convert config value to correct type: {0} {1}".format(k, v.type))
+
+
+if __name__ == '__main__':
+    Config.create_default('gan_config.settings')
