@@ -143,7 +143,7 @@ class Train(object):
             if epochs_complete >= self.config.REQUEUE_EPOCHS:
                 # We've completed enough epochs for this instance. We need to kill it and requeue
                 LOG.info("REQUEUE_EPOCHS of {0} met, calling REQUEUE_SCRIPT".format(self.config.REQUEUE_EPOCHS))
-                subprocess.call(self.config.REQUEUE_SCRIPT, shell=True)
+                subprocess.call(self.config.REQUEUE_SCRIPT, shell=True, cwd=os.path.dirname(self.config.REQUEUE_EPOCHS))
                 return True  # Requeue performed
         return False  # No requeue needed
 
