@@ -28,6 +28,7 @@ sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
 import logging
 import subprocess
+import argparse
 from datetime import datetime
 from torch import nn, optim, version
 from gan.checkpoint import Checkpoint
@@ -293,7 +294,14 @@ class Train(object):
         Checkpoint("generator_complete", self.generator.decoder.state_dict(), generator_optimiser.state_dict(), epoch).save()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_file', type=str, help='Path to the config file')
+    return vars(parser.parse_args())
+
+
 if __name__ == "__main__":
-    train = Train(Config("gan_config.settings"))
+    args = parse_args()
+    train = Train(Config(args['config_file']))
     train()
     train.close()
