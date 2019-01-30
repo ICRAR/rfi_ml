@@ -125,10 +125,11 @@ class HDF5Dataset(Dataset):
         if self.max_inputs is None:
             self.max_inputs = self.fft_count
         else:
-            if self.max_inputs <= 0:
-                raise RuntimeError('max_input <= 0')
-
-            if self.max_inputs > self.fft_count:
+            if self.max_inputs == 0:
+                self.max_inputs = self.fft_count
+            elif self.max_inputs < 0:
+                raise RuntimeError('max_input < 0')
+            elif self.max_inputs > self.fft_count:
                 LOG.warn('max_inputs > fft_count. Clamping to {0}'.format(self.fft_count))
                 self.max_inputs = self.fft_count
 
