@@ -178,9 +178,7 @@ class Train(object):
         generator_checkpoint = Checkpoint("generator")
         if generator_checkpoint.load():
             generator_epoch = self.load_state(generator_checkpoint, self.generator, generator_optimiser)
-            if generator_epoch is None:
-                return
-            else:
+            if generator_epoch is not None:
                 LOG.info("Successfully loaded generator state at epoch {0}".format(generator_epoch))
         else:
             # Failed to get GAN generator state, so try and find the final state of the
@@ -188,9 +186,7 @@ class Train(object):
             LOG.info("Failed to load generator state.")
             generator_decoder_checkpoint = Checkpoint("generator_decoder_complete")
             if generator_decoder_checkpoint.load():
-                if self.load_state(generator_decoder_checkpoint, self.generator.decoder) is None:
-                    return
-                else:
+                if self.load_state(generator_decoder_checkpoint, self.generator.decoder) is not None:
                     LOG.info("Successfully loaded completed generator decoder state")
             else:
                 # Can't find a final decoder state, so we need to train the generator as an autoencoder
@@ -200,14 +196,11 @@ class Train(object):
                     LOG.info("Generator autoencoder training completed successfully.")
                 else:
                     LOG.info("Generator autoencoder training incomplete.")
-                    return
 
         discriminator_checkpoint = Checkpoint("discriminator")
         if discriminator_checkpoint.load():
             discriminator_epoch = self.load_state(discriminator_checkpoint, self.discriminator, discriminator_optimiser)
-            if discriminator_epoch is None:
-                return
-            else:
+            if discriminator_epoch is not None:
                 LOG.info("Successfully loaded discriminator state at epoch {0}".format(discriminator_epoch))
         else:
             LOG.info("Failed to load discriminator state.")
