@@ -64,6 +64,7 @@ class Discriminator(nn.Sequential):
             *layer(width // 128, 1, final=True)
         )
 
+
 class Generator(nn.Sequential):
     """
     Generator autoencoder that will receive an array of gaussian noise, and will convert it into RFI noise.
@@ -94,12 +95,14 @@ class Generator(nn.Sequential):
         hidden1 = int(width * 0.833)
         hidden2 = int(width * 0.666)
         hidden3 = int(width * 0.5)
+
         def encoder(width):
             return nn.Sequential(
                 *layer(width, hidden1),
                 *layer(hidden1, hidden2),
                 *layer(hidden2, hidden3)
             )
+
         def decoder(width):
             return nn.Sequential(
                 *layer(hidden3, hidden2),
@@ -107,20 +110,13 @@ class Generator(nn.Sequential):
                 *layer(hidden1, width, final=True),
             )
 
-        additional_input_width = int(width * 0.125)
-        additional_hidden1_width = int(width * 0.25)
-        self.additional_input_layer = nn.Sequential(
-            *layer(additional_input_width, additional_hidden1_width),
-            *layer(additional_hidden1_width, hidden3)
-        )
-
-        self.additional_output_layer = nn.Sequential(
-            nn.Softsign()
+        self.gan_input_layer = nn.Sequential(
+            *layer(hidden3, width)
         )
         self.encoder = encoder(width)
         self.decoder = decoder(width)
 
-        self.noise_width = additional_input_width  # hidden3
+        self.noise_width = width
         self.is_autoencoder = False
 
         def init_weights(m):
@@ -133,7 +129,7 @@ class Generator(nn.Sequential):
         if self.is_autoencoder:
             return self.decoder(self.encoder(x))
         else:
-            return self.additional_output_layer(self.decoder(self.additional_input_layer(x)))
+            return self.decoder(self.gan_input_layer(x))
 
     def get_noise_width(self):
         """

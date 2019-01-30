@@ -52,8 +52,6 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 print(sys.path)
 
-import matplotlib.pyplot as plt
-
 from lba import LBAFile
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
