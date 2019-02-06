@@ -115,17 +115,16 @@ class Train(object):
                     else:
                         out = self.generator(data)
 
-                    loss = criterion(out.cpu(), data)
+                    loss = criterion(out.cpu(), data.cpu())
                     self.generator.zero_grad()
                     loss.backward()
                     optimiser.step()
 
                     vis.step_autoencoder(loss.item())
 
-                    if step % 5 == 0:
-                        # Report data and save checkpoint
-                        fmt = "Epoch [{0}/{1}], Step[{2}], loss: {3:.4f}"
-                        LOG.info(fmt.format(epoch + 1, self.config.MAX_GENERATOR_AUTOENCODER_EPOCHS, step, loss))
+                    # Report data and save checkpoint
+                    fmt = "Epoch [{0}/{1}], Step[{2}/{3}], loss: {4:.4f}"
+                    LOG.info(fmt.format(epoch + 1, self.config.MAX_GENERATOR_AUTOENCODER_EPOCHS, step, len(self.data_loader), loss))
 
                 epoch += 1
                 epochs_complete += 1
@@ -172,8 +171,8 @@ class Train(object):
 
         criterion = nn.BCELoss()
 
-        generator_epoch = 0
-        discriminator_epoch = 0
+        generator_epoch = None
+        discriminator_epoch = None
 
         # Load in the GAN generator state.
         # This will actually be the state of the generator decoder only.
@@ -182,10 +181,12 @@ class Train(object):
             generator_epoch = self.load_state(generator_checkpoint, self.generator, generator_optimiser)
             if generator_epoch is not None:
                 LOG.info("Successfully loaded generator state at epoch {0}".format(generator_epoch))
-        else:
+
+        if generator_epoch is None:
             # Failed to get GAN generator state, so try and find the final state of the
             # Generator decoder that's saved after pre-training, and load it.
             LOG.info("Failed to load generator state.")
+            generator_epoch = 0
             generator_decoder_checkpoint = Checkpoint("generator_decoder_complete")
             if generator_decoder_checkpoint.load():
                 if self.load_state(generator_decoder_checkpoint, self.generator.decoder) is not None:
@@ -204,8 +205,10 @@ class Train(object):
             discriminator_epoch = self.load_state(discriminator_checkpoint, self.discriminator, discriminator_optimiser)
             if discriminator_epoch is not None:
                 LOG.info("Successfully loaded discriminator state at epoch {0}".format(discriminator_epoch))
-        else:
+
+        if discriminator_epoch is None:
             LOG.info("Failed to load discriminator state.")
+            discriminator_epoch = 0
 
         epoch = min(generator_epoch, discriminator_epoch)
         LOG.info("Generator epoch: {0}. Discriminator epoch: {1}. Proceeding from earliest epoch: {2}"
@@ -263,14 +266,14 @@ class Train(object):
                     vis.step(d_loss_real.item(), d_loss_fake.item(), g_loss.item())
 
                     # Report data and save checkpoint
-                    fmt = "Epoch [{0}/{1}], Step[{2}], d_loss_real: {3:.4f}, d_loss_fake: {4:.4f}, g_loss: {5:.4f}"
-                    LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step, d_loss_real, d_loss_fake, g_loss))
+                    fmt = "Epoch [{0}/{1}], Step[{2}/{3}], d_loss_real: {4:.4f}, d_loss_fake: {5:.4f}, g_loss: {6:.4f}"
+                    LOG.info(fmt.format(epoch + 1, self.config.MAX_EPOCHS, step + 1, len(self.data_loader), d_loss_real, d_loss_fake, g_loss))
 
                 epoch += 1
                 epochs_complete += 1
 
                 Checkpoint("discriminator", self.discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch).save()
-                Checkpoint("generator", self.generator.decoder.state_dict(), generator_optimiser.state_dict(), epoch).save()
+                Checkpoint("generator", self.generator.state_dict(), generator_optimiser.state_dict(), epoch).save()
                 vis.plot_training(epoch)
 
                 data, noise1, _ = iter(self.data_loader).__next__()

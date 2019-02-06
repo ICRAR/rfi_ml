@@ -45,6 +45,7 @@ class Data(object):
             'filename': filename,
             'batch_size': batch_size,
         }))
+        LOG.info('Number of NN inputs available with this configuration {0}'.format(len(self.hdf5_dataset)))
 
         self.data = DataLoader(self.hdf5_dataset,
                                batch_size=batch_size,
@@ -63,6 +64,9 @@ class Data(object):
                                  shuffle=True,
                                  pin_memory=False,
                                  num_workers=0)
+
+    def __len__(self):
+        return len(self.data)
 
     def __iter__(self):
         return zip(self.data, self.noise1, self.noise2)
