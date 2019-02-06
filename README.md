@@ -71,6 +71,16 @@ REQUEUE_SCRIPT = ./requeue.sh
 
 `--max_ffts` - Specifies the maximum number of FFTs to create from the lba file. Each FFT is a single GAN input, so this specifies the number of GAN inputs to create. Set to 0 to create as many inputs as possible from the lba file (optional, defaults to 0).
 
+The preprocessor can also be used as its own module.
+
+Example
+```python
+from gan.preprocess import Preprocessor
+
+preprocessor = Preprocessor('file.lba', 'outfile.hdf5', fft_window=2048, max_ffts=1000)
+preprocessor()
+```
+
 ### Data Loading
 `data.py` and `HDF5Dataset.py` are responsible for providing the pre-processed dataset to the GAN for training.
 

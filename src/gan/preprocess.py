@@ -59,49 +59,36 @@ LOG = logging.getLogger(__name__)
 
 
 class Preprocessor(object):
+    """
+    Process an LBA file into an HDF5 file, creating datasets for real + imaginary, and absolute + angle.
+    Also includes the minimum and maximum values of each to allow the data to be normalised on the fly during training,
+    if desired.
+    """
 
-    def __init__(self):
-        self.file = None
-        self.outfile = None
-        self.fft_window = None
-        self.max_ffts = None
-
-    def parse_args(self):
+    def __init__(self, filename, outfile, fft_window=2048, max_ffts=0):
         """
-        Parse arguments to the script.
-        :return: The arguments as a dict.
+        Construct a new preprocessor
+        :param str filename: The LBA file to read data from
+        :param str outfile: The HDF5 file to write to. If this file already exists, it will not be overwritten
+        :param int fft_window: (optional) Specifies the window size, in raw samples, of the FFT to run over the raw samples
+        :param int max_ffts: (optional) Specifies the maximum number of FFTs to create from the lba file. Each FFT is a single GAN input, so this specifies the number of GAN inputs to create. Set to 0 to create as many inputs as possible from the lba file
         """
-        parser = argparse.ArgumentParser(description='Convert one or more LBA files into HDF5 files suitable for GAN training')
-        parser.add_argument('file', type=str, help='Input LBA file')
-        parser.add_argument('outfile', type=str, help='Output HDF5 file')
-        parser.add_argument('--fft_window', type=int, help='The FFT window size to use when calculating the FFT of samples', default=2048)
-        parser.add_argument('--max_ffts', type=int, help='Max number of FFTs create. 0 is use all available data', default=0)
-
-        args = vars(parser.parse_args())
-        self.file = args['file']
-        self.outfile = args['outfile']
-        self.fft_window = args['fft_window']
-        self.max_ffts = args['max_ffts']
+        self.file = filename
+        self.outfile = outfile
+        self.fft_window = fft_window
+        self.max_ffts = max_ffts
 
         if not os.path.exists(self.file):
-            LOG.error('Input file does not exist: {0}'.format(self.file))
-            return False
+            raise RuntimeError('Input file does not exist: {0}'.format(self.file))
 
         if os.path.exists(self.outfile):
-            LOG.error('Output file exists: {0}'.format(self.outfile))
-            return False
+            raise RuntimeError('Output file exists: {0}'.format(self.outfile))
 
         if self.fft_window <= 1:
-            LOG.error('FFT size too small: {0}'.format(self.fft_window))
-            return False
+            raise RuntimeError('FFT size too small: {0}'.format(self.fft_window))
 
         if self.max_ffts < 0:
-            LOG.error('Max FFTs < 0')
-            return False
-
-        LOG.info('Starting with args: {0}'.format(args))
-
-        return True
+            raise RuntimeError('Max FFTs < 0')
 
     @staticmethod
     def output_values(values, label, outfile):
@@ -121,6 +108,13 @@ class Preprocessor(object):
 
     @staticmethod
     def update_attr(value, dataset, label, function):
+        """
+        Updates a min/max attribute.
+        :param value: The new value for the attribute.
+        :param dataset: The dataset to set the attribute on.
+        :param label: The attribute's label.
+        :param function: Function to compare current and new attribute values.
+        """
         try:
             if not label in dataset.attrs:
                 dataset.attrs[label] = value
@@ -130,6 +124,14 @@ class Preprocessor(object):
             LOG.error("Can't update attr {0}".format(label))
 
     def output_fft_batch(self, samples, ffts, outfile):
+        """
+        Iterate over the polarisations and channels in the provided samples
+        and output them to the HDF5 file.
+        Also updates min and max values
+        :param samples: Samples to output
+        :param ffts: Number of FFTs to output for this batch.
+        :param outfile: HDF5 file to output to
+        """
         for polarisation in range(samples.shape[2]):
             for channel in range(samples.shape[1]):
 
@@ -182,9 +184,9 @@ class Preprocessor(object):
                     self.update_attr(maximum, outfile, 'max_angle', max)
 
     def __call__(self):
-        if not self.parse_args():
-            return
-
+        """
+        Run the preprocessor
+        """
         with open(self.file, 'r') as infile:
             lba = LBAFile(infile)
 
@@ -219,9 +221,29 @@ class Preprocessor(object):
                 LOG.info("Processed {0} out of {0} fft windows".format(max_ffts, max_ffts))
 
 
+def parse_args():
+    """
+    Parse arguments to the script.
+    :return: The arguments as a dict.
+    :rtype dict
+    """
+    parser = argparse.ArgumentParser(description='Convert one or more LBA files into HDF5 files suitable for GAN training')
+    parser.add_argument('file', type=str, help='Input LBA file')
+    parser.add_argument('outfile', type=str, help='Output HDF5 file')
+    parser.add_argument('--fft_window', type=int, help='The FFT window size to use when calculating the FFT of samples', default=2048)
+    parser.add_argument('--max_ffts', type=int, help='Max number of FFTs create. 0 is use all available data', default=0)
+
+    return vars(parser.parse_args())
+
+
 if __name__ == '__main__':
-    preprocessor = Preprocessor()
-    preprocessor()
+    args = parse_args()
+    LOG.info('Starting with args: {0}'.format(args))
+    try:
+        preprocessor = Preprocessor(args['file'], args['outfile'], args['fft_window'], args['max_ffts'])
+        preprocessor()
+    except RuntimeError as e:
+        LOG.exception("Failed to run preprocessor", e)
 
 
 

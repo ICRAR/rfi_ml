@@ -164,6 +164,12 @@ class HDF5Dataset(Dataset):
         return data
 
     def get_configuration(self):
+        """
+        Gets the current dataset configuration as a dictionary.
+        Useful for printing out the configuration.
+        :return: Dataset configuration
+        :rtype dict
+        """
         return {
             'fft_count': self.fft_count,
             'fft_window': self.fft_window,

@@ -25,14 +25,48 @@ import numpy as np
 from torch.utils.data import Dataset
 
 
+def generate_fake_noise(inputs, size):
+    """
+    Generate fake noise
+    Generate gaussian noise using -0.0289923828125, 1.9391296947313124 as mean and stddev. These are the
+    mean and stdddev of the lba files.
+    TODO: Actually generate -3, -1, 1, 3 as the only pieces of data
+    TODO: Unused.
+    :param inputs:
+    :param size:
+    :return:
+    """
+    return np.random.normal(-0.0289923828125, 1.9391296947313124, (inputs, size)).astype(np.float32)
+
+
 class NoiseDataset(Dataset):
+    """
+    Generates gaussian noise on the fly.
+    """
+
     def __init__(self, width, length):
+        """
+        Create a new noise dataset
+        :param int width: With of the noise.
+        :param int length: Size of the dataset. This is needed for Pytorch data loaders to operate correctly.
+        """
         self.width = width
         self.length = length
 
     def __getitem__(self, item):
+        """
+        Generate a new input of gaussian noise.
+        :param int item: Needed for __getitem__. Unused.
+        :return np.array: Numpy array containing the data
+        """
         data = np.random.normal(0, 1.0, self.width).astype(np.float32)
         return data
 
     def __len__(self):
+        """
+        Get the length of the dataset.
+        THis is needed for Pytorch data loaders to operate correctly.
+        :return: Length of the noise dataset
+        :rtype int
+        """
         return self.length

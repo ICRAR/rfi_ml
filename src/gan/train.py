@@ -29,6 +29,7 @@ sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 import logging
 import subprocess
 import argparse
+import torch
 from datetime import datetime
 from torch import nn, optim, version
 from gan.checkpoint import Checkpoint
@@ -43,22 +44,21 @@ mpl_logger.setLevel(logging.WARNING)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
-print(version.cuda)
-
-
-"""
-Config file specifies number of epochs to train per instance.
-After a single training run of that number of epochs finishes, it should requeue itself 
-until all the training epochs are complete.
-"""
-
 
 class Train(object):
+    """
+    Main GAN trainer. Responsible for training the GAN and pre-training the generator autoencoder.
+    """
 
     def __init__(self, config):
+        """
+        Construct a new GAN trainer
+        :param Config config: The parsed network configuration.
+        """
         self.config = config
 
         LOG.info("Creating Data Loader...")
+        LOG.info("CUDA version: {0}".format(version.cuda))
         self.data_loader = Data(config.FILENAME, config.DATA_TYPE, config.BATCH_SIZE,
                                 polarisations=config.POLARISATIONS,  # Polarisations to use
                                 frequencies=config.FREQUENCIES,  # Frequencies to use
@@ -81,6 +81,14 @@ class Train(object):
             self.generator = self._generator
 
     def _train_generator_autoencoder(self):
+        """
+        Main training loop for the generator autencoder.
+        This function will return False if:
+        - Loading the generator succeeded, but the NN model did not load the state dicts correctly.
+        - The script needs to be re-queued because the NN has been trained for REQUEUE_EPOCHS
+        :return: True if training was completed, False if training needs to continue.
+        :rtype bool
+        """
         optimiser = optim.Adam(self.generator.parameters(), lr=0.0001, betas=(0.5, 0.999))
         criterion = nn.SmoothL1Loss()
         epoch = 0
@@ -140,6 +148,12 @@ class Train(object):
         return True  # Training complete
 
     def check_requeue(self, epochs_complete):
+        """
+        Check and re-queue the training script if it has completed the desired number of training epochs per session
+        :param int epochs_complete: Number of epochs completed
+        :return: True if the script has been requeued, False if not
+        :rtype bool
+        """
         if self.config.REQUEUE_EPOCHS > 0:
             if epochs_complete >= self.config.REQUEUE_EPOCHS:
                 # We've completed enough epochs for this instance. We need to kill it and requeue
@@ -149,6 +163,14 @@ class Train(object):
         return False  # No requeue needed
 
     def load_state(self, checkpoint, module, optimiser=None):
+        """
+        Load the provided checkpoint into the provided module and optimiser.
+        This function checks whether the load threw an exception and logs it to the user.
+        :param Checkpoint checkpoint: The checkpoint to load
+        :param module: The pytorch module to load the checkpoint into.
+        :param optimiser: The pytorch optimiser to load the checkpoint into.
+        :return: None if the load failed, int number of epochs in the checkpoint if load succeeded
+        """
         try:
             module.load_state_dict(checkpoint.module_state)
             if optimiser is not None:
@@ -159,9 +181,41 @@ class Train(object):
             return None
 
     def close(self):
+        """
+        Close the data loader used by the trainer.
+        """
         self.data_loader.close()
 
+    def generate_labels(self, num_samples, pattern):
+        """
+        Generate labels for the discriminator.
+        :param int num_samples: Number of input samples to generate labels for.
+        :param list pattern: Pattern to generator. Should be either [1, 0], or [0, 1]
+        :return: New labels for the discriminator
+        """
+        var = torch.FloatTensor([pattern] * num_samples)
+        return var.cuda() if self.config.USE_CUDA else var
+
     def __call__(self):
+        """
+        Main training loop for the GAN.
+        The training process is interruptable; the model and optimiser states are saved to disk each epoch, and the
+        latest states are restored when the trainer is resumed.
+
+        If the script is not able to load the generator's saved state, it will attempt to load the pre-trained generator
+        autoencoder from the generator_decoder_complete checkpoint (if it exists). If this also fails, the generator is
+        pre-trained as an autoencoder. This training is also interruptable, and will produce the
+        generator_decoder_complete checkpoint on completion.
+
+        On successfully restoring generator and discriminator state, the trainer will proceed from the earliest restored
+        epoch. For example, if the generator is restored from epoch 7 and the discriminator is restored from epoch 5,
+        training will proceed from epoch 5.
+
+        Visualisation plots are produces each epoch and stored in
+        /path_to_input_file_directory/{gan/generator_auto_encoder}/{timestamp}/{epoch}
+
+        Each time the trainer is run, it creates a new timestamp directory using the current time.
+        """
         # When training the GAN, we only want to use the decoder part of the generator.
         generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
         discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.003, betas=(0.5, 0.999))
@@ -228,9 +282,9 @@ class Train(object):
                 for step, (data, noise1, noise2) in enumerate(self.data_loader):
                     batch_size = data.size(0)
                     if real_labels is None or real_labels.size(0) != batch_size:
-                        real_labels = self.data_loader.generate_labels(batch_size, [1.0], self.config.USE_CUDA)
+                        real_labels = self.generate_labels(batch_size, [1.0])
                     if fake_labels is None or fake_labels.size(0) != batch_size:
-                        fake_labels = self.data_loader.generate_labels(batch_size, [0.0], self.config.USE_CUDA)
+                        fake_labels = self.generate_labels(batch_size, [0.0])
 
                     if self.config.USE_CUDA:
                         data = data.cuda()
@@ -296,6 +350,11 @@ class Train(object):
 
 
 def parse_args():
+    """
+    Parse command line arguments for the trainer.
+    :return: Parsed command line arguments as a dict.
+    :rtype dict
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('config_file', type=str, help='Path to the config file')
     return vars(parser.parse_args())

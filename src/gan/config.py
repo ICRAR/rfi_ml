@@ -30,6 +30,10 @@ Default.__new__.__defaults__ = (None, None, None)
 
 
 class Config(object):
+    """
+    Handles loading of a ConfigObj configuration file, and creation of a default configuration file.
+    Configuration values are parsed into attributes on this class, accessible via config.CONFIGURATION_OPTION.
+    """
 
     defaults = {
         'USE_CUDA':                         Default(True, bool),  # True to train using the GPU, false to use the CPU
@@ -51,6 +55,10 @@ class Config(object):
 
     @classmethod
     def create_default(cls, filename):
+        """
+        Create a default configuration file using the provided filename.
+        :param str filename: The filename to save the default configuration to.
+        """
         config = ConfigObj()
         config.filename = filename
 
@@ -60,6 +68,10 @@ class Config(object):
         config.write()
 
     def __init__(self, filename):
+        """
+        Load the configuration from the specified file.
+        :param str filename: The file to load the configuration from.
+        """
         if not os.path.exists(filename):
             self.create_default(filename)
 

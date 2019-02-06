@@ -26,7 +26,6 @@ import os
 base_path = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
 
-import torch
 import logging
 from torch.utils.data import DataLoader
 from gan.HDF5Dataset import HDF5Dataset
@@ -37,7 +36,19 @@ LOG = logging.getLogger(__name__)
 
 
 class Data(object):
+    """
+    Provides access to an iterator over a set of training data. The training data consists of data read from an HDF5 file.
+    along with two generated gaussian noise datasets
+    """
+
     def __init__(self, filename, data_type, batch_size, **kwargs):
+        """
+        Create a new dataset from the provided HDF5 file.
+        :param str filename: The HDF5 file to load the data from.
+        :param str data_type: Type of data to return from the HDF5 file.  See :func:`~gan.HDF5Dataset`
+        :param int batch_size: Number of NN inputs to include in each batch.
+        :param kwargs: kwargs to pass to the :func:`~gan.HDF5Dataset` constructor.
+        """
         self.hdf5_dataset = HDF5Dataset(filename, data_type, **kwargs)
 
         LOG.info('Dataset params: {0}'.format(self.hdf5_dataset.get_configuration()))
@@ -66,20 +77,41 @@ class Data(object):
                                  num_workers=0)
 
     def __len__(self):
+        """
+        Get the number of batches in the dataset.
+        :return: Number of batches in the dataset.
+        :rtype int
+        """
         return len(self.data)
 
     def __iter__(self):
+        """
+        Get an iterator over the data in the dataset.
+        :return: Iterator over the data, noise1, and noise2 datasets.
+        :rtype iter
+        """
         return zip(self.data, self.noise1, self.noise2)
 
-    def generate_labels(self, num_samples, pattern, use_cuda):
-        var = torch.FloatTensor([pattern] * num_samples)
-        return var.cuda() if use_cuda else var
-
     def get_input_size(self):
+        """
+        Get the width of a single NN input that will be returned by this dataset.
+        :return: Width of a single input
+        :rtype int
+        """
         return self.hdf5_dataset.get_input_size()
 
     def get_input_size_first(self):
+        """
+        Gets the width of the first part of the input (real / absolute values)
+        This may be half of the size of the second input part, because the real / absolute values are
+        mirrored around their centre.
+        :return: Width of the first part of the input
+        :rtype int
+        """
         return self.hdf5_dataset.get_input_size_first()
 
     def close(self):
+        """
+        Close the underlying HDF5 dataset
+        """
         self.hdf5_dataset.close()

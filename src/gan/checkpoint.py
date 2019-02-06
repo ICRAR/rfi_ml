@@ -30,12 +30,23 @@ LOG = logging.getLogger(__name__)
 
 
 class Checkpoint(object):
+    """
+    Handles saving or loading of torch model state, optimiser state, and training epoch into a checkpoint file.
+    Checkpoints represent the model at a particular point in time, and are used to restore the moddel state between
+    training loop executions.
+    """
+
     CHECKPOINT_PREFIX = 'checkpoint_'
     MODEL_PREFIX = 'model_save_'
 
     def __init__(self, filename, module_state=None, optimiser_state=None, epoch=None):
         """
-        Create a new checkpoint
+        Create a checkpoint that saves to / loads from the specified checkpoint directory.
+        The state parameters to this constructor are optional, but should all be provided at once.
+        :param filename: The checkpoint directory to use. 'checkpoint_' is prepended to this filename.
+        :param module_state: (optional) Current state of the torch model to save.
+        :param optimiser_state: (optional) Current optimiser state to save.
+        :param epoch: (optional) Current epoch to save.
         """
         self.directory = os.path.abspath('./{0}{1}'.format(self.CHECKPOINT_PREFIX, filename))
         self.module_state = module_state
@@ -43,6 +54,20 @@ class Checkpoint(object):
         self.epoch = epoch
 
     def load(self):
+        """
+        Find the latest checkpoint inside the provided checkpoint directory, and load the stored module state,
+        optimiser state, and epoch into this checkpoint.
+        Example Usage::
+
+            checkpoint = Checkpoint('filename')
+            if checkpoint.load():
+                print('Success!')
+            else:
+                print('Fail!')
+
+        :return: True if a checkpoint was loaded from the checkpoint directory, False if not
+        :rtype bool
+        """
         # Tries to load the latest file in given checkpoint directory
 
         # Get all files in the directory starting with the model prefix
@@ -61,8 +86,8 @@ class Checkpoint(object):
 
     def save(self):
         """
-        Save the checkpoint to a file
-        :param f: File descriptor or filename
+        Save the current checkpoint data to the provided checkpoint directory. The file created within the directory is
+        formatted as 'model_save_{current_datetime}'. All older checkpoints in this directory are removed.
         """
         save_path = os.path.join(self.directory, '{0}{1}'.format(self.MODEL_PREFIX, datetime.datetime.now()))
 
@@ -79,6 +104,11 @@ class Checkpoint(object):
         }, save_path)
 
     def _get_checkpoint_files(self):
+        """
+        Gets all checkpoint files in the checkpoint directory
+        :return: List containing files in the checkpoint directory that start with the model prefix.
+        :rtype list
+        """
         if not os.path.exists(self.directory):
             return []
         return [os.path.join(self.directory, f) for f in os.listdir(self.directory) if f.startswith(self.MODEL_PREFIX)]
