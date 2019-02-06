@@ -39,6 +39,25 @@ The main code for pre-processing data and running the GAN can be found in the `g
 
 `REQUEUE_SCRIPT` - if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
 
+**Example**
+```text
+USE_CUDA = True
+FILENAME = At.hdf5
+DATA_TYPE = real_imag
+MAX_EPOCHS = 60
+MAX_GENERATOR_AUTOENCODER_EPOCHS = 5
+MAX_SAMPLES = 0
+BATCH_SIZE = 4096
+POLARISATIONS = 0, 1
+FREQUENCIES = 0, 1, 2, 3
+FULL_FIRST = True
+NORMALISE = False
+ADD_DROPOUT = True
+ADD_NOISE = False
+REQUEUE_EPOCHS = 1
+REQUEUE_SCRIPT = ./requeue.sh
+```
+
 ### Preprocessing
 `preprocess.py` accepts an lba data file containing 2-bit encoded data, and produces an HDF5 file containing GAN input data.
 
@@ -59,7 +78,7 @@ The main code for pre-processing data and running the GAN can be found in the `g
 
 `data.py` - Provides an iterator over a specified HDF5 dataset, and an iterator over two noise datasets.
 
-Example Usage
+**Example**
 ```python
 from gan.data import Data
 from gan.models.single_polarisation_single_frequency import Generator, Discriminator
@@ -79,12 +98,20 @@ for step, (data, noise1, noise2) in enumerate(loader):
 ```
 
 ### Model
-`models/` directory contains python files defining the GAN model.
+`models/` directory contains python files defining the discriminator and generator.
+
+**Example**
+```python
+from gan.models.single_polarisation_single_frequency import Discriminator, Generator
+
+discriminator = Discriminator(4096)
+generator = Generator(4096)
+```
 
 ### Checkpointing
 `checkpoint.py` contains code for checkpointing the GAN model, optimiser, and epoch state.
 
-Example loading a checkpoint
+**Example Loading**
 ```python
 from torch.optim import Adam
 from gan.checkpoint import Checkpoint
@@ -112,7 +139,7 @@ else:
     print("No checkpoints to load")
 ```
 
-Example saving a checkpoint
+**Example Saving**
 ```python
 from torch.optim import Adam
 from gan.checkpoint import Checkpoint
@@ -125,13 +152,12 @@ epoch = 0
 
 # Create the checkpoint in the 'checkpoint_generator' directory
 Checkpoint('generator', generator.state_dict(), optimiser.state_dict(), epoch).save()
-
 ```
 
 ## Visualisation
 `visualise.py` runs a multiprocess job queue that creates PDFs that display the NNs training progress over time, and sample outputs of the NN for each epoch.
 
-Example
+**Example**
 ```python
 from gan.visualise import Visualiser
 from gan.data import Data
@@ -176,7 +202,7 @@ Visualisation plots are produces each epoch and stored in `/path_to_input_file_d
 
 Each time the trainer is run, it creates a new `timestamp` directory using the current time.
 
-Example
+**Example**
 ```python
 from gan.train import Train
 from gan.config import Config
