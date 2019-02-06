@@ -136,12 +136,6 @@ class HDF5Dataset(Dataset):
         # If true, normalise data before returning it
         self.normalise = kwargs.get('normalise', False)
 
-    def __del__(self):
-        """
-        Close the dataset
-        """
-        self.close()
-
     def __len__(self):
         """
         :return: Number of inputs in the dataset
