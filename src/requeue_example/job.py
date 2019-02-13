@@ -27,11 +27,14 @@ import os
 MAX_PROGRESS = 10
 MAX_STEPS_PER_RUN = 2
 PROGRESS_FILE = 'progress.txt'
+ENQUEUE_SCRIPT = 'enqueue.sh'
 
 
 def requeue():
     print('Requeue job')
-    subprocess.call('./enqueue.sh', shell=True, cwd=os.path.dirname(__file__))
+    cwd = os.getcwd()
+    path = os.path.join(cwd, ENQUEUE_SCRIPT)
+    subprocess.call(path, shell=True, cwd=os.getcwd())
 
 
 def load():
@@ -64,7 +67,9 @@ def main():
 
         if steps_per_run >= MAX_STEPS_PER_RUN:
             save_and_requeue(progress)
-            break
+            return
+
+    print("All done!")
 
 
 if __name__ == '__main__':
