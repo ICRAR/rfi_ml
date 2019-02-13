@@ -22,6 +22,7 @@
 #
 
 import subprocess
+import os
 
 MAX_PROGRESS = 10
 MAX_STEPS_PER_RUN = 2
@@ -30,7 +31,7 @@ PROGRESS_FILE = 'progress.txt'
 
 def requeue():
     print('Requeue job')
-    subprocess.call('enqueue.sh', shell=True)
+    subprocess.call('enqueue.sh', shell=True, cwd=os.getcwd())
 
 
 def load():
