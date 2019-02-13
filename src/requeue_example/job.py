@@ -31,7 +31,7 @@ PROGRESS_FILE = 'progress.txt'
 
 def requeue():
     print('Requeue job')
-    subprocess.call('enqueue.sh', shell=True, cwd=os.getcwd())
+    subprocess.call('./enqueue.sh', shell=True, cwd=os.getcwd())
 
 
 def load():
