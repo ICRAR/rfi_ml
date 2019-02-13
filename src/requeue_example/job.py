@@ -22,6 +22,7 @@
 #
 
 import subprocess
+import time
 import os
 
 MAX_PROGRESS = 10
@@ -64,6 +65,8 @@ def main():
         progress += 1
         steps_per_run += 1
         print('Progress {0}'.format(progress))
+
+        time.sleep(1)
 
         if steps_per_run >= MAX_STEPS_PER_RUN:
             save_and_requeue(progress)
