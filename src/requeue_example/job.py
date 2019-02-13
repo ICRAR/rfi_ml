@@ -46,7 +46,7 @@ def load():
 
 def save_and_requeue(progress):
     with open(PROGRESS_FILE, 'w') as f:
-        f.write(progress)
+        f.write('{0}'.format(progress))
     print('Progress saved at {0}'.format(progress))
     requeue()
 
