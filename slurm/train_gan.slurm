@@ -8,15 +8,13 @@
 #SBATCH --partition=mlgpu
 #SBATCH --gres=gpu:1
 #SBATCH --mem=16000
-#SBATCH -o /home/ipromnorakit/log/train_gan_%j.err
-#SBATCH -e /home/ipromnorakit/log/train_gan_%j.out
+#SBATCH -o /home/sfoster/train_gan_%j.err
+#SBATCH -e /home/sfoster/train_gan_%j.out
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user ittp.michael@gmail.com
+#SBATCH --mail-user sam6321@live.com.au
 
-module load /home/ipromnorakit/modulefile/cuda-9.0 
+module load /home/sfoster/rfi_ml/modulefile/cuda-9.0
 
-source ~/.profile
-conda activate rfi_ml
+cd /home/sfoster/rfi_ml/src/gan/
+/home/sfoster/env/bin/python train.py /home/sfoster/rfi_ml/slurm/gan_config.settings
 
-cd /home/ipromnorakit/rfi_ml/src/gan
-srun -n 1 python ./train.py 

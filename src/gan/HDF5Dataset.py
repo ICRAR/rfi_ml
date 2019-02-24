@@ -60,6 +60,7 @@ class HDF5Dataset(Dataset):
         super(HDF5Dataset, self).__init__()
 
         self.hdf5 = h5py.File(filename, 'r', swmr=True, libver='latest', rdcc_nbytes=1000000000)  # 1 GB
+        self.cache = {}
 
         def get_attribute(name):
             value = self.hdf5.attrs.get(name, None)
@@ -120,6 +121,9 @@ class HDF5Dataset(Dataset):
         # User wants the real / abs values to be fully re-created from the half that we have
         self.full_first = kwargs.get('full_first', False)
 
+        # User wants to cache data from the HDF5 file instead of re-reading it
+        self.use_cache = kwargs.get('use_cachce', False)
+
         # User specified they only want to use this many NN inputs from the entire dataset
         self.max_inputs = get_int_argument('max_inputs')
         if self.max_inputs is None:
@@ -142,15 +146,20 @@ class HDF5Dataset(Dataset):
         """
         return self.max_inputs * len(self.polarisations) * len(self.frequencies)
 
-    def __getitem__(self, index):
+    def __getitem__(self, i):
         """
         Gets an NN input from the dataset. This will iterate over all of the selected
         polarisations and frequencies.
         :param index: The index to get.
         :return: A single NN input
         """
+        if self.use_cache:
+            cached = self.cache.get(i, None)
+            if cached is not None:
+                return cached
+
         length = len(self)
-        p, index = self.get_index(index, length, self.polarisations)
+        p, index = self.get_index(i, length, self.polarisations)
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
         key = 'p{0}_c{1}_{2}'.format(p, c, self.type)
         data_container = self.hdf5[key]
@@ -160,6 +169,9 @@ class HDF5Dataset(Dataset):
 
         if self.normalise:
             data = self.normalise_data(data_container, data)
+
+        if self.use_cache:
+            self.cache[i] = data
 
         return data
 
@@ -255,25 +267,44 @@ class HDF5Dataset(Dataset):
         """
         return self.size_first * 2 if self.full_first else self.size_first
 
+    def precache(self):
+        """
+        Add all items in the dataset to the cache
+        """
+        if not self.use_cache:
+            raise Exception('Cache is not enabled')
+
+        for i in range(len(self)):
+            self.__getitem__(i)
+
+
+def test():
+    sum = 0
+    for d in loader:
+        sum += d.shape[0]
+    return sum
+
 
 if __name__ == '__main__':
+    import timeit
+    import time
+    from torch.utils.data import DataLoader
+
     dataset = HDF5Dataset('/home/sam/Projects/rfi_ml/src/gan/At.hdf5', 'abs_angle',
+                          use_cachce=True,
                           normalise=True,
                           full_first=True,
-                          max_inputs=100,
-                          polarisations=[1],
-                          frequencies=[0])
-    count_p = {}
-    count_c = {}
-    for i in range(len(dataset)):
-        p_value, c_value, data = dataset[i]
-        count_p[p_value] = count_p.get(p_value, 0) + 1
-        count_c[c_value] = count_c.get(c_value, 0) + 1
-        print(p_value, c_value, data.shape)
-        fig = plt.figure()
-        plt.plot(data)
-        plt.show()
-        plt.close(fig)
-    print(count_p)
-    print(count_c)
-    print(len(dataset))
+                          polarisations=[0, 1],
+                          frequencies=[0, 1, 2, 3])
+
+    loader = DataLoader(dataset,
+                        batch_size=4096,
+                        shuffle=True,
+                        pin_memory=False,
+                        num_workers=0)
+
+    start = time.time()
+    dataset.precache()
+    print(time.time() - start)
+    print(timeit.timeit('test()', setup='from __main__ import test', number=100))
+
