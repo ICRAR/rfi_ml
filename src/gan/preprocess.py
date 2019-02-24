@@ -43,15 +43,12 @@ Metadata
    '{real/imag/abs/angle}_{polarisation}_{channel}_norm' = [min, max]
 """
 
-import os
-import sys
 import argparse
 import logging
+import os
+
 import h5py
 import numpy as np
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-print(sys.path)
-
 from lba import LBAFile
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
@@ -70,8 +67,11 @@ class Preprocessor(object):
         Construct a new preprocessor
         :param str filename: The LBA file to read data from
         :param str outfile: The HDF5 file to write to. If this file already exists, it will not be overwritten
-        :param int fft_window: (optional) Specifies the window size, in raw samples, of the FFT to run over the raw samples
-        :param int max_ffts: (optional) Specifies the maximum number of FFTs to create from the lba file. Each FFT is a single GAN input, so this specifies the number of GAN inputs to create. Set to 0 to create as many inputs as possible from the lba file
+        :param int fft_window: (optional) Specifies the window size, in raw samples, of the FFT to run over the raw
+                    samples
+        :param int max_ffts: (optional) Specifies the maximum number of FFTs to create from the lba file. Each FFT is a
+                    single GAN input, so this specifies the number of GAN inputs to create. Set to 0 to create as many
+                    inputs as possible from the lba file
         """
         self.file = filename
         self.outfile = outfile
@@ -99,12 +99,12 @@ class Preprocessor(object):
         :param label: Dataset name
         :param outfile: HDF5 file
         """
-        try:
-            dataset = outfile[label]
-            dataset.resize(dataset.shape[0] + values.shape[0], axis=0)
-            dataset[-values.shape[0]:] = values.astype(np.float32)
-        except:
+        if label not in outfile:
             outfile.create_dataset(label, data=values.astype(np.float32), maxshape=(None,), chunks=True)
+
+        dataset = outfile[label]
+        dataset.resize(dataset.shape[0] + values.shape[0], axis=0)
+        dataset[-values.shape[0]:] = values.astype(np.float32)
 
     @staticmethod
     def update_attr(value, dataset, label, function):
@@ -115,13 +115,10 @@ class Preprocessor(object):
         :param label: The attribute's label.
         :param function: Function to compare current and new attribute values.
         """
-        try:
-            if not label in dataset.attrs:
-                dataset.attrs[label] = value
-            else:
-                dataset.attrs[label] = function(dataset.attrs[label], value)
-        except Exception as e:
-            LOG.error("Can't update attr {0}".format(label))
+        if label not in dataset.attrs:
+            dataset.attrs[label] = value
+        else:
+            dataset.attrs[label] = function(dataset.attrs[label], value)
 
     def output_fft_batch(self, samples, ffts, outfile):
         """
@@ -136,15 +133,17 @@ class Preprocessor(object):
             for channel in range(samples.shape[1]):
 
                 for fft_batch_id in range(ffts):
-                    fft_batch = samples[fft_batch_id * self.fft_window : (fft_batch_id + 1) * self.fft_window]
-
+                    fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]
                     fft = np.fft.fft(fft_batch[:, channel, polarisation])
 
                     real = fft.real
-                    real = real[0:real.shape[0] // 2]
+                    # TODO: Why only 1/2 the real array and all the imaginary?
+                    # real = real[0:real.shape[0] // 2]
                     imag = fft.imag
+
                     absolute = np.abs(fft)
-                    absolute = absolute[0:absolute.shape[0] // 2]
+                    # TODO: Why only 1/2 the amplitude and all the phase?
+                    # absolute = absolute[0:absolute.shape[0] // 2]
                     angle = np.angle(fft)
 
                     p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
@@ -191,7 +190,8 @@ class Preprocessor(object):
             lba = LBAFile(infile)
 
             max_samples = lba.max_samples
-            max_samples -= max_samples % self.fft_window  # Ignore any samples at the end that won't fill a full fft window.
+            # Ignore any samples at the end that won't fill a full fft window.
+            max_samples -= max_samples % self.fft_window
 
             if self.max_ffts > 0:
                 max_samples = min(self.fft_window * self.max_ffts, max_samples)
@@ -203,9 +203,9 @@ class Preprocessor(object):
                 outfile.attrs['fft_window'] = self.fft_window
                 outfile.attrs['samples'] = max_samples
                 outfile.attrs['fft_count'] = max_ffts
-                outfile.attrs['size_first'] = self.fft_window // 2
+                outfile.attrs['size_first'] = self.fft_window
                 outfile.attrs['size_second'] = self.fft_window
-                outfile.attrs['size'] = self.fft_window + self.fft_window // 2
+                outfile.attrs['size'] = self.fft_window + self.fft_window
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
                     LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
@@ -227,11 +227,18 @@ def parse_args():
     :return: The arguments as a dict.
     :rtype dict
     """
-    parser = argparse.ArgumentParser(description='Convert one or more LBA files into HDF5 files suitable for GAN training')
+    parser = argparse.ArgumentParser(
+        description='Convert one or more LBA files into HDF5 files suitable for GAN training')
     parser.add_argument('file', type=str, help='Input LBA file')
     parser.add_argument('outfile', type=str, help='Output HDF5 file')
-    parser.add_argument('--fft_window', type=int, help='The FFT window size to use when calculating the FFT of samples', default=2048)
-    parser.add_argument('--max_ffts', type=int, help='Max number of FFTs create. 0 is use all available data', default=0)
+    parser.add_argument('--fft_window',
+                        type=int,
+                        help='The FFT window size to use when calculating the FFT of samples',
+                        default=2048)
+    parser.add_argument('--max_ffts',
+                        type=int,
+                        help='Max number of FFTs create. 0 is use all available data',
+                        default=0)
 
     return vars(parser.parse_args())
 
@@ -244,7 +251,3 @@ if __name__ == '__main__':
         preprocessor()
     except RuntimeError as e:
         LOG.exception("Failed to run preprocessor", e)
-
-
-
-

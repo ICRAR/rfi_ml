@@ -22,7 +22,8 @@
 #
 
 """
-GAN model that can accept a data from a single polarisation and single frequency (1D array of samples of N width per batch).
+GAN model that can accept a data from a single polarisation and single frequency (1D array of samples of N width per
+batch).
 Has option to use FFT of samples (2N width per batch)
 """
 
@@ -76,8 +77,6 @@ class Generator(nn.Sequential):
     def __init__(self, width):
         """
         Construct the generator
-        :param width: Number of samples to put through the network per batch.
-        :param noise_width: Width of the input noise vector to the network.
         """
         super(Generator, self).__init__()
 
@@ -96,18 +95,18 @@ class Generator(nn.Sequential):
         hidden2 = int(width * 0.666)
         hidden3 = int(width * 0.5)
 
-        def encoder(width):
+        def encoder(width_):
             return nn.Sequential(
-                *layer(width, hidden1),
+                *layer(width_, hidden1),
                 *layer(hidden1, hidden2),
                 *layer(hidden2, hidden3)
             )
 
-        def decoder(width):
+        def decoder(width_):
             return nn.Sequential(
                 *layer(hidden3, hidden2),
                 *layer(hidden2, hidden1),
-                *layer(hidden1, width, final=True),
+                *layer(hidden1, width_, final=True),
             )
 
         self.gan_input_layer = nn.Sequential(

@@ -21,22 +21,20 @@
 #    MA 02111-1307  USA
 #
 
-import sys
-import os
-base_path = os.path.dirname(__file__)
-sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
-
-import logging
-import subprocess
 import argparse
-import torch
+import logging
+import os
+import subprocess
 from datetime import datetime
+
+import torch
 from torch import nn, optim, version
-from gan.checkpoint import Checkpoint
-from gan.data import Data
-from gan.models.single_polarisation_single_frequency import Generator, Discriminator
-from gan.visualise import Visualiser
-from gan.config import Config
+
+from checkpoint import Checkpoint
+from config import Config
+from data import Data
+from models.single_polarisation_single_frequency import Generator, Discriminator
+from visualise import Visualiser
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
@@ -59,12 +57,16 @@ class Train(object):
 
         LOG.info("Creating Data Loader...")
         LOG.info("CUDA version: {0}".format(version.cuda))
-        self.data_loader = Data(config.FILENAME, config.DATA_TYPE, config.BATCH_SIZE,
-                                polarisations=config.POLARISATIONS,  # Polarisations to use
-                                frequencies=config.FREQUENCIES,  # Frequencies to use
-                                max_inputs=config.MAX_SAMPLES,  # Max inputs per polarisation and frequency to use
-                                full_first=config.FULL_FIRST,  # Mirror real / absolute values instead of only using the first half
-                                normalise=config.NORMALISE)  # Normalise inputs
+        self.data_loader = Data(config.FILENAME,
+                                config.DATA_TYPE,
+                                config.BATCH_SIZE,
+                                polarisations=config.POLARISATIONS,     # Polarisations to use
+                                frequencies=config.FREQUENCIES,         # Frequencies to use
+                                max_inputs=config.MAX_SAMPLES,          # Max inputs per polarisation and frequency
+                                                                        # to use
+                                full_first=config.FULL_FIRST,           # Mirror real / absolute values instead of only
+                                                                        # using the first half
+                                normalise=config.NORMALISE)             # Normalise inputs
 
         width = self.data_loader.get_input_size()
         LOG.info("Creating models with input width {0}".format(width))

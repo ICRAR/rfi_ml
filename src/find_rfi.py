@@ -47,7 +47,8 @@ def rfi_mean_stddev(samples, findex, pindex, read_index, out_filename):
     ft = ft[10:-10]
     fft = fft[10:-10]
 
-    # fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]  # Ignore the lower and upper frequencies as they often contain trash
+    # Ignore the lower and upper frequencies as they often contain trash
+    # fft = np.abs(np.fft.rfft(samples[:, findex, pindex]))[10:-10]
     indexes = np.argwhere(fft > np.mean(fft) + np.std(fft) * 6)
 
     if indexes.shape[0] > 2 or read_index == 0:

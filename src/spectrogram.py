@@ -30,7 +30,6 @@ import argparse
 import logging
 import matplotlib
 import numpy as np
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from lba import LBAFile
 from scipy import signal

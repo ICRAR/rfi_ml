@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 #    ICRAR - International Centre for Radio Astronomy Research
-#    (c) UWA - The University of Western Australia
+#    (c) UWA - The University of Western Australia, 2018
 #    Copyright by UWA (in the framework of the ICRAR)
 #    All rights reserved
 #
@@ -27,10 +27,26 @@ Utilities for loading LBA files
 
 import mmap
 import os
-import sys
 import struct
+
 import numpy as np
 
+
+# | Station Modes | At Mp Pa                                |
+# |---------------|-----------------------------------------|
+# | Channel 1	  | DAS #1 IFP#1-LO 6300 - 6316 MHz USB RCP |
+# | Channel 2	  | DAS #1 IFP#1-HI 6316 - 6332 MHz USB RCP |
+# | Channel 3	  | DAS #1 IFP#2-LO 6300 - 6316 MHz USB LCP |
+# | Channel 4	  | DAS #1 IFP#2-HI 6316 - 6332 MHz USB LCP |
+# | Channel 5	  | DAS #2 IFP#1-LO 6642 - 6658 MHz USB RCP |
+# | Channel 6	  | DAS #2 IFP#1-HI 6658 - 6674 MHz USB RCP |
+# | Channel 7	  | DAS #2 IFP#2-LO 6642 - 6658 MHz USB LCP |
+# | Channel 8	  | DAS #2 IFP#2-HI 6658 - 6674 MHz USB LCP |
+# | DAS 1 Skyfreq | 6316 MHz                                |
+# | DAS 2 Skyfreq | 6658 MHz                                |
+# | Bandwidth	  | 16 MHz                                  |
+#
+# Each frequency channel is 16MHz wide (stacked upward from 6.3GHz and 6.642GHz)
 
 class LBAFile(object):
     """
@@ -123,9 +139,13 @@ class LBAFile(object):
         num_chan = int(self.header["NCHAN"])
         num_bits = int(self.header["NUMBITS"])
         data_start = int(self.header["HEADERSIZE"])
+
         # Richard orginally gave this map [3, -3, 1, -1], but it seems to be wrong as
         # I don't get the correct spread of output values (about 2x the number of 1s as there are 3s)
         # This map was taken from some ancient csiro C code
+        #
+        # 23/02/19: Looking at fauto.c, fcross.c, lba2mk5b.c, vsib_record.c, vsib_checker.c the -1 and 1 are
+        # sometimes reversed so we need to be careful
         val_map = [3, 1, -1, -3]  # 2 bit encoding map
 
         # 2 polarisations per frequency, so there are half as many frequencies as channels
@@ -196,7 +216,9 @@ class LBAFile(object):
                 if (samples_read + offset) % 32000000 == 0:
                     # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
                     if intdata != 65535:
-                        print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(offset + samples_read))
+                        print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(
+                            offset + samples_read
+                        ))
                     else:
                         print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
                 else:
@@ -207,9 +229,13 @@ class LBAFile(object):
                         # freq2: 0101, P0: 01, P1: 01
                         # freq3: 1010, P0: 10, P1: 10
                         # freq4: 1001, p0: 01, p1: 10
-                        freqdata = intdata >> frequency * num_freq_bits & freq_mask  # Pull out the low 4 bits for this frequency
-                        nparray[samples_output][frequency][0] = val_map[freqdata & sample_mask]  # Pull out the low two bits for P0
-                        nparray[samples_output][frequency][1] = val_map[freqdata >> num_bits & sample_mask]  # Pull out the high two bits for P1
+
+                        # Pull out the low 4 bits for this frequency
+                        freqdata = intdata >> frequency * num_freq_bits & freq_mask
+                        # Pull out the low two bits for P0
+                        nparray[samples_output][frequency][0] = val_map[freqdata & sample_mask]
+                        # Pull out the high two bits for P1
+                        nparray[samples_output][frequency][1] = val_map[freqdata >> num_bits & sample_mask]
                     samples_output += 1
 
                     if samples_output == samples:

@@ -3,3 +3,14 @@
 /data/GMRT/
 /src/train.prof
 /src/gmrt_cnn.model.pth
+/rfi_ml.iml
+/data/*.lba
+/src/gan/gan_config.settings
+/data/*.h5
+/data/**/*.pdf
+/src/gan/checkpoint_discriminator/
+/src/gan/checkpoint_discriminator_complete/
+/src/gan/checkpoint_generator/
+/src/gan/checkpoint_generator_autoencoder/
+/src/gan/checkpoint_generator_complete/
+/src/gan/checkpoint_generator_decoder_complete/

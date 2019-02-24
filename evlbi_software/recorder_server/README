@@ -1,0 +1,21 @@
+recorder_server
+A network server for the vsib_record command for the Australian
+eVLBI project.
+Copyright (C) 2006  Jamie Stevens
+
+This code is released under the terms of the GNU Public License (GPL).
+A copy of this license should have been distributed along with this
+code, in a file called GPL_INFO.
+
+This is general release 8 of this code. Any bugs/comments should
+be sent to the author:
+Jamie Stevens
+Jamie.Stevens@utas.edu.au
+or in the case of emergencies, the author can be telephoned at:
++61 3 62267529
+
+For instructions on building the binary recorder_server, read
+BUILD. For instructions on installing the binary, read INSTALL.
+Documentation for this code can be found online at
+http://www-ra.phys.utas.edu.au/~jstevens/vsib/
+

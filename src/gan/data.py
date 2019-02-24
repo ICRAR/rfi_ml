@@ -21,15 +21,12 @@
 #    MA 02111-1307  USA
 #
 
-import sys
-import os
-base_path = os.path.dirname(__file__)
-sys.path.append(os.path.abspath(os.path.join(base_path, '..')))
-
 import logging
+
 from torch.utils.data import DataLoader
-from gan.HDF5Dataset import HDF5Dataset
-from gan.NoiseDataset import NoiseDataset
+
+from HDF5Dataset import HDF5Dataset
+from NoiseDataset import NoiseDataset
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
@@ -37,8 +34,8 @@ LOG = logging.getLogger(__name__)
 
 class Data(object):
     """
-    Provides access to an iterator over a set of training data. The training data consists of data read from an HDF5 file.
-    along with two generated gaussian noise datasets
+    Provides access to an iterator over a set of training data. The training data consists of data read from an HDF5
+    file along with two generated gaussian noise datasets
     """
 
     def __init__(self, filename, data_type, batch_size, **kwargs):
