@@ -32,21 +32,8 @@ import struct
 import numpy as np
 
 
-# | Station Modes | At Mp Pa                                |
-# |---------------|-----------------------------------------|
-# | Channel 1	  | DAS #1 IFP#1-LO 6300 - 6316 MHz USB RCP |
-# | Channel 2	  | DAS #1 IFP#1-HI 6316 - 6332 MHz USB RCP |
-# | Channel 3	  | DAS #1 IFP#2-LO 6300 - 6316 MHz USB LCP |
-# | Channel 4	  | DAS #1 IFP#2-HI 6316 - 6332 MHz USB LCP |
-# | Channel 5	  | DAS #2 IFP#1-LO 6642 - 6658 MHz USB RCP |
-# | Channel 6	  | DAS #2 IFP#1-HI 6658 - 6674 MHz USB RCP |
-# | Channel 7	  | DAS #2 IFP#2-LO 6642 - 6658 MHz USB LCP |
-# | Channel 8	  | DAS #2 IFP#2-HI 6658 - 6674 MHz USB LCP |
-# | DAS 1 Skyfreq | 6316 MHz                                |
-# | DAS 2 Skyfreq | 6658 MHz                                |
-# | Bandwidth	  | 16 MHz                                  |
-#
-# Each frequency channel is 16MHz wide (stacked upward from 6.3GHz and 6.642GHz)
+SAMPLE_RATE = 32000000
+
 
 class LBAFile(object):
     """
@@ -58,6 +45,41 @@ class LBAFile(object):
         data = lba.read()
     """
 
+    # For the Numpy array holding the data
+    # Freq
+    # 0 = 6300-6316
+    # 1 = 6316-6332
+    # 2 = 6642-6658
+    # 3 = 6658-6674
+    #
+    # Pol
+    # 0 = RCP
+    # 1 = LCP
+    #
+    # $FREQ;
+    # *
+    # def 6300.00MHz8x16MHz;
+    # * mode =  1    stations =At:Mp:Pa
+    #      sample_rate =  32.000 Ms/sec;  * (2bits/sample)
+    #      chan_def = :  6300.00 MHz : U :  16.00 MHz : &CH01 : &BBC01 : &NoCal; *Rcp
+    #      chan_def = :  6642.00 MHz : U :  16.00 MHz : &CH02 : &BBC02 : &NoCal; *Rcp
+    #      chan_def = :  6316.00 MHz : U :  16.00 MHz : &CH03 : &BBC01 : &NoCal; *Rcp
+    #      chan_def = :  6658.00 MHz : U :  16.00 MHz : &CH04 : &BBC02 : &NoCal; *Rcp
+    #      chan_def = :  6300.00 MHz : U :  16.00 MHz : &CH05 : &BBC03 : &NoCal; *Lcp
+    #      chan_def = :  6642.00 MHz : U :  16.00 MHz : &CH06 : &BBC04 : &NoCal; *Lcp
+    #      chan_def = :  6316.00 MHz : U :  16.00 MHz : &CH07 : &BBC03 : &NoCal; *Lcp
+    #      chan_def = :  6658.00 MHz : U :  16.00 MHz : &CH08 : &BBC04 : &NoCal; *Lcp
+    # enddef;
+    channel_frequency_polarisation_map = [
+        (0, 0),    # Chan 0
+        (2, 0),    # Chan 1
+        (1, 0),    # Chan 2
+        (3, 0),    # Chan 3
+        (0, 1),    # Chan 4
+        (2, 1),    # Chan 5
+        (1, 1),    # Chan 6
+        (3, 1),    # Chan 7
+    ]
     byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
     def __init__(self, f):
@@ -89,6 +111,10 @@ class LBAFile(object):
         # a 65535 marker which is meaningless
         max_samples -= max_samples // 32000000
         return max_samples
+
+    @classmethod
+    def _get_frequency_polarisation(cls, channel):
+        return cls.channel_frequency_polarisation_map[channel]
 
     def _read_header(self):
         """
@@ -140,18 +166,23 @@ class LBAFile(object):
         num_bits = int(self.header["NUMBITS"])
         data_start = int(self.header["HEADERSIZE"])
 
-        # Richard orginally gave this map [3, -3, 1, -1], but it seems to be wrong as
+        # Richard originally gave this map [3, -3, 1, -1], but it seems to be wrong as
         # I don't get the correct spread of output values (about 2x the number of 1s as there are 3s)
         # This map was taken from some ancient csiro C code
         #
-        # 23/02/19: Looking at fauto.c, fcross.c, lba2mk5b.c, vsib_record.c, vsib_checker.c the -1 and 1 are
-        # sometimes reversed so we need to be careful
+        # 23/02/19: https://ntrs.nasa.gov/archive/nasa/casi.ntrs.nasa.gov/20110011794.pdf page 196
+        # VDIF-encoded data samples are represented by the desired number of bits in a fixed-point
+        # ‘offset binary sequence’, beginning with all 0’s for the most-negative sampled value to all 1’s for
+        # the most-positive sampled value. For example, 2-bit/sample coding is (in order from most negative
+        # to most positive) 00, 01, 10, 11. This coding is compatible with existing Mark 5B, K5, and LBADR
+        # disk-based VLBI data systems, though bit-ordering may be different in some cases
+        #
         val_map = [3, 1, -1, -3]  # 2 bit encoding map
 
         # 2 polarisations per frequency, so there are half as many frequencies as channels
         # and twice as many bits per frequency.
         num_freq = num_chan // 2
-        num_freq_bits = num_bits * 2
+        # num_freq_bits = num_bits * 2
 
         # Calculate number of bytes per sample
         bytes_per_sample = self.bytes_per_sample
@@ -173,10 +204,6 @@ class LBAFile(object):
             raise Exception("Offset {0}, samples {1} will overflow lba file".format(offset, samples))
 
         sample_offset = offset * bytes_per_sample
-
-        # This will result in a mask for the number of bits in each frequency
-        # e.g. for 4 bits per frequency, this will have the low 4 bits set
-        freq_mask = (1 << num_freq_bits) - 1
 
         # This will result in a mask for the number of bits in a single sample
         # e.g. for 2 bits per sample, this will have the low 2 bits set
@@ -208,12 +235,8 @@ class LBAFile(object):
             # Unpack chunk into an array of correctly sized integers
             samples_chunk = struct.unpack(struct_unpack_fmt, data_chunk)
 
-            # data = self.mm.read(bytes_per_sample)
-            # Read one sample into a byte (should be a short between 0 and 65535)
-            # intdata = int.from_bytes(data, byteorder=sys.byteorder)
-
             for intdata in samples_chunk:
-                if (samples_read + offset) % 32000000 == 0:
+                if (samples_read + offset) % SAMPLE_RATE == 0:
                     # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
                     if intdata != 65535:
                         print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(
@@ -222,20 +245,11 @@ class LBAFile(object):
                     else:
                         print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
                 else:
-                    for frequency in range(num_freq):
-                        # One sample contains data across all frequencies (4), with two polarisations per frequency
-                        # e.g. 16 bit sample: 1001,1010,0101,0000
-                        # freq1: 0000, P0: 00, P1: 11
-                        # freq2: 0101, P0: 01, P1: 01
-                        # freq3: 1010, P0: 10, P1: 10
-                        # freq4: 1001, p0: 01, p1: 10
-
-                        # Pull out the low 4 bits for this frequency
-                        freqdata = intdata >> frequency * num_freq_bits & freq_mask
+                    for channel in range(num_chan):
+                        frequency, polarisation = self.channel_frequency_polarisation_map[channel]
                         # Pull out the low two bits for P0
-                        nparray[samples_output][frequency][0] = val_map[freqdata & sample_mask]
-                        # Pull out the high two bits for P1
-                        nparray[samples_output][frequency][1] = val_map[freqdata >> num_bits & sample_mask]
+                        nparray[samples_output][frequency][polarisation] = \
+                            val_map[intdata >> (channel * 2) & sample_mask]
                     samples_output += 1
 
                     if samples_output == samples:
