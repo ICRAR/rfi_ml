@@ -29,6 +29,7 @@ import gc
 import json
 import logging
 import os
+import argparse
 
 import matplotlib
 import matplotlib.mlab as mlab
@@ -327,17 +328,12 @@ class LBAPlotter(object):
         os.makedirs(self.out_directory, exist_ok=True)
         LOGGER.info("Output directory {0} created".format(self.out_directory))
 
-        if self.filename.endswith(".lba"):
-            with open(self.filename, "r") as f:
-                LOGGER.info("Opening LBA file {0} and reading samples...".format(self.filename))
-                lba = LBAFile(f)
-                samples = lba.read(self.sample_offset, self.num_samples)
-                del lba
-                gc.collect()  # Ensure the loaded lba file is unloaded
-        elif self.filename.endswith(".npz"):
-            samples = np.load(self.filename)["arr_0"]
-        else:
-            raise ValueError('{} not recognised'.format(self.filename))
+        with open(self.filename, "r") as f:
+            LOGGER.info("Opening LBA file {0} and reading samples...".format(self.filename))
+            lba = LBAFile(f)
+            samples = lba.read(self.sample_offset, self.num_samples)
+            del lba
+            gc.collect()  # Ensure the loaded lba file is unloaded
 
         LOGGER.info("Read {0} samples".format(self.num_samples))
 
@@ -449,15 +445,19 @@ class LBAPlotter(object):
             """
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate plots from an lba file")
+    parser.add_argument('lba', help='LBA file to load from')
+    parser.add_argument('out', help='Directory to output to')
+    parser.add_argument('--num_samples', type=int, default=SAMPLE_RATE, help='Number of samples to use to generate plots. Defaults to 1 second of samples')
+    return vars(parser.parse_args())
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.INFO)
 
-    num_samples = SAMPLE_RATE # Should be the first second of data
-    LBAPlotter("../../data/v255ae_At_072_060000.lba", "./At_out/", num_samples_=num_samples)()
-    gc.collect()
-    LBAPlotter("../../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples_=num_samples)()
-    gc.collect()
-    LBAPlotter("../../data/vt255ae_Pa_072_060000.lba", "./Pa_out/", num_samples_=num_samples)()
-    gc.collect()
+    args = parse_args()
+
+    LBAPlotter(args['lba'], args['out'], num_samples_=args['num_samples'])()
