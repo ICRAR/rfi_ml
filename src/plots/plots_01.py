@@ -38,7 +38,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from scipy import signal
 
 from lba import LBAFile
-from src.lba import SAMPLE_RATE
+from lba import SAMPLE_RATE
 
 LOGGER = logging.getLogger(__name__)
 
