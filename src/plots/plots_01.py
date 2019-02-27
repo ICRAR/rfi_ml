@@ -212,7 +212,7 @@ class LBAPlotter(object):
             plt.ylabel("Power Spectral Density [V/rtMHz]")
             plt.title(self.get_plot_title("periodogram"))
             plt.grid()
-            plt.plot(f, pxx)
+            plt.plot(f[10:-10], pxx[10:-10])
 
             plt.tight_layout()
             pdf.savefig()
@@ -254,7 +254,7 @@ class LBAPlotter(object):
             plt.ylabel("Power Spectral Density [V/rtMHz]")
             plt.title(self.get_plot_title("lombscargle"))
             plt.grid()
-            plt.plot(f, pgram)
+            plt.plot(f[10:-10], pgram[10:-10])
 
             plt.tight_layout()
             pdf.savefig()
@@ -269,13 +269,13 @@ class LBAPlotter(object):
 
     def save_rfft(self, fft):
         f, ft = fft
-        with PdfPages(self.get_output_filename("fft.pdf")) as pdf:
+        with PdfPages(self.get_output_filename("rfft.pdf")) as pdf:
             plt.figure(figsize=(16, 9))
             plt.xlabel("Frequency [MHz]")
             plt.ylabel("Power [V]")
-            plt.title(self.get_plot_title("fft"))
+            plt.title(self.get_plot_title("rfft"))
             plt.grid()
-            plt.plot(f, ft)
+            plt.plot(f[10:-10], ft[10:-10])
 
             plt.tight_layout()
             pdf.savefig()
@@ -284,7 +284,7 @@ class LBAPlotter(object):
     @staticmethod
     def create_ifft(samples):
         ft = np.fft.fft(samples * signal.windows.tukey(samples.shape[0]))
-        f = np.fft.fftfreq(samples.shape[0], d=SAMPLE_RATE)
+        f = np.fft.fftfreq(samples.shape[0], d=1.0/SAMPLE_RATE)
         return f, np.imag(ft)
 
     def save_ifft(self, fft):

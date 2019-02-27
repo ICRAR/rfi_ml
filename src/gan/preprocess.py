@@ -77,6 +77,7 @@ class Preprocessor(object):
         self.outfile = outfile
         self.fft_window = fft_window
         self.max_ffts = max_ffts
+        self.ffts_output = 0
 
         if not os.path.exists(self.file):
             raise RuntimeError('Input file does not exist: {0}'.format(self.file))
@@ -89,22 +90,6 @@ class Preprocessor(object):
 
         if self.max_ffts < 0:
             raise RuntimeError('Max FFTs < 0')
-
-    @staticmethod
-    def output_values(values, label, outfile):
-        """
-        Outputs a new set of fft data, either real + imag or absolute + angle.
-        The two input parts are concatenated together into the 'values' parameter
-        :param values: Values to add to the dataset
-        :param label: Dataset name
-        :param outfile: HDF5 file
-        """
-        if label not in outfile:
-            outfile.create_dataset(label, data=values.astype(np.float32), maxshape=(None,), chunks=True)
-
-        dataset = outfile[label]
-        dataset.resize(dataset.shape[0] + values.shape[0], axis=0)
-        dataset[-values.shape[0]:] = values.astype(np.float32)
 
     @staticmethod
     def update_attr(value, dataset, label, function):
@@ -129,8 +114,20 @@ class Preprocessor(object):
         :param ffts: Number of FFTs to output for this batch.
         :param outfile: HDF5 file to output to
         """
+
+        # rfft output sizes depend on even or odd
+        # https://docs.scipy.org/doc/numpy/reference/generated/numpy.fft.rfft.html
+        if self.fft_window % 2 == 0:
+            size = self.fft_window / 2 + 1
+        else:
+            size = (self.fft_window + 1) / 2
+
         for polarisation in range(samples.shape[2]):
             for channel in range(samples.shape[1]):
+
+                p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
+                if p_c_identifier not in outfile:
+                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, size), chunks=True)
 
                 for fft_batch_id in range(ffts):
                     fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]
@@ -142,41 +139,39 @@ class Preprocessor(object):
                     absolute = np.abs(fft)
                     angle = np.angle(fft)
 
-                    p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
-                    fft_label = '{0}_real_imag'.format(p_c_identifier)
-                    abs_angle_label = '{0}_abs_angle'.format(p_c_identifier)
-                    self.output_values(np.concatenate((real, imag)), fft_label, outfile)
-                    self.output_values(np.concatenate((absolute, angle)), abs_angle_label, outfile)
+                    outfile[p_c_identifier][self.ffts_output + fft_batch_id] = np.stack((real, imag, absolute, angle))
 
                     # Store a minimum for all items in a particular channel and polarisation,
                     # and also store a minimum for all items
                     minimum = np.min(real)
-                    self.update_attr(minimum, outfile[fft_label], 'min_real', min)
+                    self.update_attr(minimum, outfile[p_c_identifier], 'min_real', min)
                     self.update_attr(minimum, outfile, 'min_real', min)
                     maximum = np.max(real)
-                    self.update_attr(maximum, outfile[fft_label], 'max_real', max)
+                    self.update_attr(maximum, outfile[p_c_identifier], 'max_real', max)
                     self.update_attr(maximum, outfile, 'max_real', max)
 
                     minimum = np.min(imag)
-                    self.update_attr(minimum, outfile[fft_label], 'min_imag', min)
+                    self.update_attr(minimum, outfile[p_c_identifier], 'min_imag', min)
                     self.update_attr(minimum, outfile, 'min_imag', min)
                     maximum = np.max(imag)
-                    self.update_attr(maximum, outfile[fft_label], 'max_imag', max)
+                    self.update_attr(maximum, outfile[p_c_identifier], 'max_imag', max)
                     self.update_attr(maximum, outfile, 'max_imag', max)
 
                     minimum = np.min(absolute)
-                    self.update_attr(minimum, outfile[abs_angle_label], 'min_abs', min)
+                    self.update_attr(minimum, outfile[p_c_identifier], 'min_abs', min)
                     self.update_attr(minimum, outfile, 'min_abs', min)
                     maximum = np.max(absolute)
-                    self.update_attr(maximum, outfile[abs_angle_label], 'max_abs', max)
+                    self.update_attr(maximum, outfile[p_c_identifier], 'max_abs', max)
                     self.update_attr(maximum, outfile, 'max_abs', max)
 
                     minimum = np.min(angle)
-                    self.update_attr(minimum, outfile[abs_angle_label], 'min_angle', min)
+                    self.update_attr(minimum, outfile[p_c_identifier], 'min_angle', min)
                     self.update_attr(minimum, outfile, 'min_angle', min)
                     maximum = np.max(angle)
-                    self.update_attr(maximum, outfile[abs_angle_label], 'max_angle', max)
+                    self.update_attr(maximum, outfile[p_c_identifier], 'max_angle', max)
                     self.update_attr(maximum, outfile, 'max_angle', max)
+
+        self.ffts_output += ffts
 
     def __call__(self):
         """
@@ -199,9 +194,6 @@ class Preprocessor(object):
                 outfile.attrs['fft_window'] = self.fft_window
                 outfile.attrs['samples'] = max_samples
                 outfile.attrs['fft_count'] = max_ffts
-                outfile.attrs['size_first'] = self.fft_window
-                outfile.attrs['size_second'] = self.fft_window
-                outfile.attrs['size'] = self.fft_window + self.fft_window
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
                     LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
