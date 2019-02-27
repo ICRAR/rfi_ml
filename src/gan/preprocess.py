@@ -187,6 +187,8 @@ class Preprocessor(object):
                 max_samples = min(self.fft_window * self.max_ffts, max_samples)
 
             max_ffts = max_samples // self.fft_window
+            if self.max_ffts == 0:
+                self.max_ffts = max_ffts  # Get the max FFTs from the lba file as the user has not specified
 
             samples_read = 0
             with h5py.File(self.outfile, 'w') as outfile:
