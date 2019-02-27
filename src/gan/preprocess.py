@@ -79,6 +79,13 @@ class Preprocessor(object):
         self.max_ffts = max_ffts
         self.ffts_output = 0
 
+        # rfft output sizes depend on even or odd
+        # https://docs.scipy.org/doc/numpy/reference/generated/numpy.fft.rfft.html
+        if self.fft_window % 2 == 0:
+            self.input_size = self.fft_window / 2 + 1
+        else:
+            self.input_size = (self.fft_window + 1) / 2
+
         if not os.path.exists(self.file):
             raise RuntimeError('Input file does not exist: {0}'.format(self.file))
 
@@ -114,20 +121,12 @@ class Preprocessor(object):
         :param ffts: Number of FFTs to output for this batch.
         :param outfile: HDF5 file to output to
         """
-
-        # rfft output sizes depend on even or odd
-        # https://docs.scipy.org/doc/numpy/reference/generated/numpy.fft.rfft.html
-        if self.fft_window % 2 == 0:
-            size = self.fft_window / 2 + 1
-        else:
-            size = (self.fft_window + 1) / 2
-
         for polarisation in range(samples.shape[2]):
             for channel in range(samples.shape[1]):
 
                 p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
                 if p_c_identifier not in outfile:
-                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, size), chunks=True)
+                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, self.input_size), chunks=True)
 
                 for fft_batch_id in range(ffts):
                     fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]
@@ -194,6 +193,7 @@ class Preprocessor(object):
                 outfile.attrs['fft_window'] = self.fft_window
                 outfile.attrs['samples'] = max_samples
                 outfile.attrs['fft_count'] = max_ffts
+                outfile.attrs['input_size'] = self.input_size
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
                     LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
