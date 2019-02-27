@@ -45,7 +45,6 @@ class Config(object):
         'BATCH_SIZE':                       Default(4096, int),  # Number of samples to train on per batch
         'POLARISATIONS':                    Default([0, 1], list, int),  # Which polarisations should be used?
         'FREQUENCIES':                      Default([0, 1, 2, 3], list, int),  # Which frequencies should be used?
-        'FULL_FIRST':                       Default(False, bool),  # Set to true use the full set of real / absolute values. False to only use one half.
         'NORMALISE':                        Default(True, bool),  # Set to true to normalise inputs
         'ADD_DROPOUT':                      Default(True, bool),  # if true, add dropout to the inputs before passing them into the network
         'ADD_NOISE':                        Default(False, bool),  # if true, add noise to the inputs before passing them into the network

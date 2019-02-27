@@ -167,7 +167,7 @@ class LBAPlotter(object):
 
     @staticmethod
     def create_spectrogram(freq):
-        return signal.spectrogram(freq, fs=SAMPLE_RATE, window=('tukey', 0.5))
+        return signal.spectrogram(freq, fs=SAMPLE_RATE)
 
     @staticmethod
     def merge_spectrograms(spectrograms, normalise_local=False):
@@ -201,7 +201,7 @@ class LBAPlotter(object):
 
     @staticmethod
     def create_periodogram(freq):
-        return signal.periodogram(freq, fs=SAMPLE_RATE, window=('tukey', 0.5))
+        return signal.periodogram(freq, fs=SAMPLE_RATE)
 
     def save_periodogram(self, periodogram):
         f, pxx = periodogram
@@ -219,7 +219,7 @@ class LBAPlotter(object):
 
     @staticmethod
     def create_welch(freq):
-        return signal.welch(freq, fs=SAMPLE_RATE, window=('tukey', 0.5))
+        return signal.welch(freq, fs=SAMPLE_RATE)
 
     def save_welch(self, welch):
         f, spec = welch
@@ -302,7 +302,7 @@ class LBAPlotter(object):
 
     @staticmethod
     def create_psd(samples):
-        return mlab.psd(samples, Fs=SAMPLE_RATE, window=signal.get_window(('tukey', 0.5), 256))
+        return mlab.psd(samples, Fs=SAMPLE_RATE)
 
     def save_psd(self, psd, type_, ylabel):
         pxx, freqs = psd
@@ -430,7 +430,7 @@ class LBAPlotter(object):
             self.frequency = None
 
             # Create merged spectrograms for this p
-            LOGGER.info("{0}, P{1} Merged Spectrograms...".format(self.filename, pindex))
+            """LOGGER.info("{0}, P{1} Merged Spectrograms...".format(self.filename, pindex))
             for index, group in enumerate(spectrogram_groups):
                 LOGGER.info("{0}, P{1} Merged Spectrograms Group {2}".format(self.filename, pindex, index))
                 merged = self.merge_spectrograms(group)
@@ -446,6 +446,7 @@ class LBAPlotter(object):
                     "group {0} merged local normalisation".format(index), 
                     "spectrogram_group{0}_merged_normalised.pdf".format(index)
                 )
+            """
 
 
 if __name__ == "__main__":
@@ -453,7 +454,7 @@ if __name__ == "__main__":
     mpl_logger = logging.getLogger('matplotlib')
     mpl_logger.setLevel(logging.INFO)
 
-    num_samples = 1919999940 // 2048  # SAMPLE_RATE # should be 1 second
+    num_samples = SAMPLE_RATE # Should be the first second of data
     LBAPlotter("../../data/v255ae_At_072_060000.lba", "./At_out/", num_samples_=num_samples)()
     gc.collect()
     LBAPlotter("../../data/v255ae_Mp_072_060000.lba", "./Mp_out/", num_samples_=num_samples)()

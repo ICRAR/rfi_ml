@@ -22,7 +22,6 @@
 #
 
 import h5py
-import matplotlib.pyplot as plt
 import itertools
 import numpy as np
 import logging
@@ -54,7 +53,6 @@ class HDF5Dataset(Dataset):
             polarisations: A list of polarisations (0 to 1) that should be included in the data
             frequencies: A list of frequencies (0 to 3) that should be included in the data
             max_inputs: Maximum number of inputs to get per polarisation, frequency pair
-            full_first: Reconstruct the full real / absolute values if set to true
             normalise: Normalise the data as per the dataset min and max values in the HDF5 file
         """
         super(HDF5Dataset, self).__init__()
@@ -118,9 +116,6 @@ class HDF5Dataset(Dataset):
         # User specified they only want these frequencies
         self.frequencies = get_ints_argument('frequencies', [0, 1, 2, 3])
 
-        # User wants the real / abs values to be fully re-created from the half that we have
-        self.full_first = kwargs.get('full_first', False)
-
         # User wants to cache data from the HDF5 file instead of re-reading it
         self.use_cache = kwargs.get('use_cachce', False)
 
@@ -164,8 +159,6 @@ class HDF5Dataset(Dataset):
         key = 'p{0}_c{1}_{2}'.format(p, c, self.type)
         data_container = self.hdf5[key]
         data = data_container[index * self.size : (index + 1) * self.size]
-        if self.full_first:
-            data = self.rebuild_first_part(data)
 
         if self.normalise:
             data = self.normalise_data(data_container, data)
@@ -191,7 +184,6 @@ class HDF5Dataset(Dataset):
             'size_second': self.size_second,
             'polarisations': self.polarisations,
             'frequencies': self.frequencies,
-            'full_first': self.full_first,
             'max_inputs': self.max_inputs,
             'normalise': self.normalise,
             'type': self.type,
@@ -210,16 +202,6 @@ class HDF5Dataset(Dataset):
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
         return p, c
 
-    def rebuild_first_part(self, data):
-        """
-        Reconstructs the entire real / absolute values from the half values that are included in the
-        HDF5 file
-        :param data: Data to reconstruct
-        :return: Data with reconstructed first half
-        """
-        first = data[0:self.size_first]
-        return np.concatenate((first, np.flip(first), data[self.size_first:self.size]))
-
     def normalise_data(self, data_container, data):
         """
         Normalise the provided data with the min and max values in the HDF5 dataset
@@ -227,10 +209,9 @@ class HDF5Dataset(Dataset):
         :param data: The data to normalise
         :return: Normalised data
         """
-        first_size = self.size_first * 2 if self.full_first else self.size_first
-        size = first_size + self.size_second
-        data1 = data[0:first_size]
-        data2 = data[first_size:size]
+        size = self.size_first + self.size_second
+        data1 = data[0:self.size_first]
+        data2 = data[self.size_first:size]
 
         # Normalise to -1 to 1
         minimum = data_container.attrs[self.type_minmax_keys[0]]
@@ -265,7 +246,7 @@ class HDF5Dataset(Dataset):
         """
         :return: The size of the first part of the input (real / absolute)
         """
-        return self.size_first * 2 if self.full_first else self.size_first
+        return self.size_first
 
     def precache(self):
         """

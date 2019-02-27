@@ -61,23 +61,23 @@ class LBAFile(object):
     # def 6300.00MHz8x16MHz;
     # * mode =  1    stations =At:Mp:Pa
     #      sample_rate =  32.000 Ms/sec;  * (2bits/sample)
-    #      chan_def = :  6300.00 MHz : U :  16.00 MHz : &CH01 : &BBC01 : &NoCal; *Rcp
-    #      chan_def = :  6642.00 MHz : U :  16.00 MHz : &CH02 : &BBC02 : &NoCal; *Rcp
-    #      chan_def = :  6316.00 MHz : U :  16.00 MHz : &CH03 : &BBC01 : &NoCal; *Rcp
-    #      chan_def = :  6658.00 MHz : U :  16.00 MHz : &CH04 : &BBC02 : &NoCal; *Rcp
-    #      chan_def = :  6300.00 MHz : U :  16.00 MHz : &CH05 : &BBC03 : &NoCal; *Lcp
-    #      chan_def = :  6642.00 MHz : U :  16.00 MHz : &CH06 : &BBC04 : &NoCal; *Lcp
-    #      chan_def = :  6316.00 MHz : U :  16.00 MHz : &CH07 : &BBC03 : &NoCal; *Lcp
-    #      chan_def = :  6658.00 MHz : U :  16.00 MHz : &CH08 : &BBC04 : &NoCal; *Lcp
+    # | Channel 1	    | DAS #1 IFP#1-LO 6300 - 6316 MHz USB RCP |
+    # | Channel 2	    | DAS #1 IFP#1-HI 6316 - 6332 MHz USB RCP |
+    # | Channel 3	    | DAS #1 IFP#2-LO 6300 - 6316 MHz USB LCP |
+    # | Channel 4	    | DAS #1 IFP#2-HI 6316 - 6332 MHz USB LCP |
+    # | Channel 5	    | DAS #2 IFP#1-LO 6642 - 6658 MHz USB RCP |
+    # | Channel 6	    | DAS #2 IFP#1-HI 6658 - 6674 MHz USB RCP |
+    # | Channel 7	    | DAS #2 IFP#2-LO 6642 - 6658 MHz USB LCP |
+    # | Channel 8	    | DAS #2 IFP#2-HI 6658 - 6674 MHz USB LCP |
     # enddef;
     channel_frequency_polarisation_map = [
         (0, 0),    # Chan 0
-        (2, 0),    # Chan 1
-        (1, 0),    # Chan 2
-        (3, 0),    # Chan 3
-        (0, 1),    # Chan 4
-        (2, 1),    # Chan 5
-        (1, 1),    # Chan 6
+        (1, 0),    # Chan 1
+        (0, 1),    # Chan 2
+        (1, 1),    # Chan 3
+        (2, 0),    # Chan 4
+        (3, 0),    # Chan 5
+        (2, 1),    # Chan 6
         (3, 1),    # Chan 7
     ]
     byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}

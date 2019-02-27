@@ -28,8 +28,6 @@ Generate a spectrogram across a part of an lba file
 import os
 import argparse
 import logging
-import matplotlib
-import numpy as np
 import matplotlib.pyplot as plt
 from lba import LBAFile
 from scipy import signal

@@ -134,16 +134,12 @@ class Preprocessor(object):
 
                 for fft_batch_id in range(ffts):
                     fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]
-                    fft = np.fft.fft(fft_batch[:, channel, polarisation])
+                    fft = np.fft.rfft(fft_batch[:, channel, polarisation])
 
                     real = fft.real
-                    # TODO: Why only 1/2 the real array and all the imaginary?
-                    # real = real[0:real.shape[0] // 2]
                     imag = fft.imag
 
                     absolute = np.abs(fft)
-                    # TODO: Why only 1/2 the amplitude and all the phase?
-                    # absolute = absolute[0:absolute.shape[0] // 2]
                     angle = np.angle(fft)
 
                     p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)

@@ -27,8 +27,6 @@ The main code for pre-processing data and running the GAN can be found in the `g
 
 `FREQUENCIES` - Which frequencies should be used? (comma separated list, defaults to 0, 1, 2, 3).
 
-`FULL_FIRST` - Set to true use the full set of real / absolute values. False to only use one half (defaults to false).
-
 `NORMALISE` - Set to true to normalise inputs (defaults to true).
 
 `ADD_DROPOUT` - If true, add dropout to the inputs before passing them into the network (defaults to true).
@@ -50,7 +48,6 @@ MAX_SAMPLES = 0
 BATCH_SIZE = 4096
 POLARISATIONS = 0, 1
 FREQUENCIES = 0, 1, 2, 3
-FULL_FIRST = True
 NORMALISE = False
 ADD_DROPOUT = True
 ADD_NOISE = False

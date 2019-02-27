@@ -64,8 +64,6 @@ class Train(object):
                                 frequencies=config.FREQUENCIES,         # Frequencies to use
                                 max_inputs=config.MAX_SAMPLES,          # Max inputs per polarisation and frequency
                                                                         # to use
-                                full_first=config.FULL_FIRST,           # Mirror real / absolute values instead of only
-                                                                        # using the first half
                                 normalise=config.NORMALISE)             # Normalise inputs
 
         width = self.data_loader.get_input_size()
