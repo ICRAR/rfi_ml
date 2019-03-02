@@ -38,6 +38,7 @@ class HDF5Dataset(Dataset):
     """
 
     valid_types = {'abs_angle', 'real_imag'}
+    type_index_map = {'real': 0, 'imag': 1, 'abs': 2, 'angle': 3}
 
     @staticmethod
     def get_index(index, length, possibilities):
@@ -89,6 +90,10 @@ class HDF5Dataset(Dataset):
         if self.type not in self.valid_types:
             raise RuntimeError('type should be one of {0}, not {1}'.format(self.valid_types, self.type))
 
+        types = self.type.split('_')
+        self.first_type_index = self.type_index_map[types[0]]
+        self.second_type_index = self.type_index_map[types[1]]
+
         # Keys for getting the attribute names of the min and max values
         self.type_minmax_keys = ['{0}_{1}'.format(m, k) for k, m in itertools.product(self.type.split('_'), ['min', 'max'])]
 
@@ -101,14 +106,8 @@ class HDF5Dataset(Dataset):
         # Total number of samples that were FFT'd
         self.samples = get_attribute('samples')
 
-        # Size of each NN input contained within this file.
-        self.size = get_attribute('size')
-
-        # Size of first part of nn input (real or absolute)
-        self.size_first = get_attribute('size_first')
-
-        # Size of second part of nn input (imaginary or angles)
-        self.size_second = get_attribute('size_second')
+        # Size of each NN input
+        self.input_size = get_attribute('input_size')
 
         # User specified they only want these polarisations
         self.polarisations = get_ints_argument('polarisations', [0, 1])
@@ -117,7 +116,7 @@ class HDF5Dataset(Dataset):
         self.frequencies = get_ints_argument('frequencies', [0, 1, 2, 3])
 
         # User wants to cache data from the HDF5 file instead of re-reading it
-        self.use_cache = kwargs.get('use_cachce', False)
+        self.use_cache = kwargs.get('use_cache', False)
 
         # User specified they only want to use this many NN inputs from the entire dataset
         self.max_inputs = get_int_argument('max_inputs')
@@ -156,9 +155,12 @@ class HDF5Dataset(Dataset):
         length = len(self)
         p, index = self.get_index(i, length, self.polarisations)
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
-        key = 'p{0}_c{1}_{2}'.format(p, c, self.type)
+        key = 'p{0}_c{1}'.format(p, c)
         data_container = self.hdf5[key]
-        data = data_container[index * self.size : (index + 1) * self.size]
+        data_first = data_container[index][self.first_type_index]
+        data_second = data_container[index][self.second_type_index]
+
+        data = np.concatenate((data_first, data_second))
 
         if self.normalise:
             data = self.normalise_data(data_container, data)
@@ -179,15 +181,14 @@ class HDF5Dataset(Dataset):
             'fft_count': self.fft_count,
             'fft_window': self.fft_window,
             'samples': self.samples,
-            'size': self.size,
-            'size_first': self.size_first,
-            'size_second': self.size_second,
             'polarisations': self.polarisations,
             'frequencies': self.frequencies,
             'max_inputs': self.max_inputs,
             'normalise': self.normalise,
             'type': self.type,
-            'input_size': self.get_input_size()
+            'input_size': self.get_input_size(),
+            'first_type_index': self.first_type_index,
+            'second_type_index': self.second_type_index
         }
 
     def get_polarisation_and_channel(self, index):
@@ -209,9 +210,9 @@ class HDF5Dataset(Dataset):
         :param data: The data to normalise
         :return: Normalised data
         """
-        size = self.size_first + self.size_second
-        data1 = data[0:self.size_first]
-        data2 = data[self.size_first:size]
+        size = self.get_input_size()
+        data1 = data[0:size // 2]
+        data2 = data[size // 2:size]
 
         # Normalise to -1 to 1
         minimum = data_container.attrs[self.type_minmax_keys[0]]
@@ -240,13 +241,7 @@ class HDF5Dataset(Dataset):
         """
         :return: The size of each input that this dataset will return
         """
-        return self.get_input_size_first() + self.size_second
-
-    def get_input_size_first(self):
-        """
-        :return: The size of the first part of the input (real / absolute)
-        """
-        return self.size_first
+        return int(self.input_size * 2)
 
     def precache(self):
         """

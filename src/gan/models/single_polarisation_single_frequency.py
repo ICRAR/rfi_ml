@@ -95,18 +95,18 @@ class Generator(nn.Sequential):
         hidden2 = int(width * 0.666)
         hidden3 = int(width * 0.5)
 
-        def encoder(width_):
+        def encoder(width):
             return nn.Sequential(
-                *layer(width_, hidden1),
+                *layer(width, hidden1),
                 *layer(hidden1, hidden2),
                 *layer(hidden2, hidden3)
             )
 
-        def decoder(width_):
+        def decoder(width):
             return nn.Sequential(
                 *layer(hidden3, hidden2),
                 *layer(hidden2, hidden1),
-                *layer(hidden1, width_, final=True),
+                *layer(hidden1, width, final=True),
             )
 
         self.gan_input_layer = nn.Sequential(
