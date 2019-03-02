@@ -200,9 +200,9 @@ class LBAPlotter(object):
             pdf.savefig()
             plt.close()
 
-    @staticmethod
-    def create_periodogram(freq):
-        return signal.periodogram(freq, fs=SAMPLE_RATE)
+    # @staticmethod
+    # def create_periodogram(freq):
+    #     return signal.periodogram(freq, fs=SAMPLE_RATE)
 
     def save_periodogram(self, periodogram):
         f, pxx = periodogram
@@ -351,7 +351,7 @@ class LBAPlotter(object):
             LOGGER.info("{0}, P{1} Sample statistics...".format(self.filename, pindex))
             self.output_sample_statistics(p)
 
-            spectrogram_groups = [[], []]  # freq1, freq2 : freq3, freq4
+            # spectrogram_groups = [[], []]  # freq1, freq2 : freq3, freq4
             # Iterate over each of the four frequencies
             for freq_index in range(p.shape[1]):
                 LOGGER.info("{0}, P{1} Frequency {2}".format(self.filename, pindex, freq_index))
@@ -368,16 +368,16 @@ class LBAPlotter(object):
                 # Calculate the actual frequencies for the spectrogram
                 self.fix_freq(f, freq_index)
                 spectrogram = (f, t, sxx)
-                spectrogram_groups[freq_index // 2].append(spectrogram)
+                # spectrogram_groups[freq_index // 2].append(spectrogram)
                 LOGGER.info("{0}, P{1}, F{2} Spectrogram Saving".format(self.filename, pindex, freq_index))
                 self.save_spectrogram(spectrogram)
 
                 # Periodogram for this frequency
-                LOGGER.info("{0}, P{1}, F{2} Periodogram".format(self.filename, pindex, freq_index))
-                f, pxx = self.create_periodogram(freq_samples)
-                self.fix_freq(f, freq_index)
-                LOGGER.info("{0}, P{1}, F{2} Periodogram Saving".format(self.filename, pindex, freq_index))
-                self.save_periodogram((f, pxx))
+                # LOGGER.info("{0}, P{1}, F{2} Periodogram".format(self.filename, pindex, freq_index))
+                # f, pxx = self.create_periodogram(freq_samples)
+                # self.fix_freq(f, freq_index)
+                # LOGGER.info("{0}, P{1}, F{2} Periodogram Saving".format(self.filename, pindex, freq_index))
+                # self.save_periodogram((f, pxx))
 
                 # Welch
                 LOGGER.info("{0}, P{1}, F{2} Welch".format(self.filename, pindex, freq_index))
@@ -449,7 +449,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Generate plots from an lba file")
     parser.add_argument('lba', help='LBA file to load from')
     parser.add_argument('out', help='Directory to output to')
-    parser.add_argument('--num_samples', type=int, default=SAMPLE_RATE, help='Number of samples to use to generate plots. Defaults to 1 second of samples')
+    parser.add_argument(
+        '--num_samples',
+        type=int,
+        default=SAMPLE_RATE*2,
+        help='Number of samples to use to generate plots. Defaults to 1 second of samples')
     return vars(parser.parse_args())
 
 
