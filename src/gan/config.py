@@ -49,7 +49,8 @@ class Config(object):
         'ADD_DROPOUT':                      Default(True, bool),  # if true, add dropout to the inputs before passing them into the network
         'ADD_NOISE':                        Default(False, bool),  # if true, add noise to the inputs before passing them into the network
         'REQUEUE_EPOCHS':                   Default(0, int),  # if > 0, perform REQUEUE_EPOCHS of training, stop, then run the REQUEUE_SCRIPT
-        'REQUEUE_SCRIPT':                   Default("", str)  # if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
+        'REQUEUE_SCRIPT':                   Default("", str),  # if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
+        'CHECKPOINT_USE_SAVE_PROCESS':      Default(False, bool)  # Use a process for saving checkpoints to speed up the training loop
     }
 
     @classmethod

@@ -118,6 +118,23 @@ class HDF5Dataset(Dataset):
         # User wants to cache data from the HDF5 file instead of re-reading it
         self.use_cache = kwargs.get('use_cache', False)
 
+        # Slice data_slice[0] elements from the start of the input, and data_slice[1] from the end.
+        # This can be used to remove FFT artifacts
+        self.data_slice = kwargs.get('data_slice', (0, 0))
+        slice_type = type(self.data_slice)
+        if slice_type == tuple:
+            length = len(self.data_slice)
+            if length == 1:
+                self.data_slice = (self.data_slice[0], 0)
+            elif length != 2:
+                raise RuntimeError('data_slice must be a tuple of length 1 or 2')
+            if type(self.data_slice[0]) != int or type(self.data_slice[1]) != int:
+                raise RuntimeError('data_slice elements must be ints')
+        elif slice_type == int:
+            self.data_slice = (self.data_slice, self.data_slice)
+        else:
+            raise RuntimeError('data_slice must be a tuple or an int')
+
         # User specified they only want to use this many NN inputs from the entire dataset
         self.max_inputs = get_int_argument('max_inputs')
         if self.max_inputs is None:
@@ -158,12 +175,27 @@ class HDF5Dataset(Dataset):
         key = 'p{0}_c{1}'.format(p, c)
         data_container = self.hdf5[key]
         data_first = data_container[index][self.first_type_index]
+        data_first = data_first[self.data_slice[0]:data_first.shape[0] - self.data_slice[1]]
         data_second = data_container[index][self.second_type_index]
-
-        data = np.concatenate((data_first, data_second))
+        data_second = data_second[self.data_slice[0]:data_second.shape[0] - self.data_slice[1]]
 
         if self.normalise:
-            data = self.normalise_data(data_container, data)
+            # Normalise to -1 to 1
+            minimum = data_container.attrs[self.type_minmax_keys[0]]
+            maximum = data_container.attrs[self.type_minmax_keys[1]]
+            data_first -= minimum
+            data_first /= maximum - minimum
+            data_first *= 2
+            data_first -= 1
+
+            minimum = data_container.attrs[self.type_minmax_keys[2]]
+            maximum = data_container.attrs[self.type_minmax_keys[3]]
+            data_second -= minimum
+            data_second /= maximum - minimum
+            data_second *= 2
+            data_second -= 1
+
+        data = np.concatenate((data_first, data_second))
 
         if self.use_cache:
             self.cache[i] = data
@@ -203,34 +235,6 @@ class HDF5Dataset(Dataset):
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
         return p, c
 
-    def normalise_data(self, data_container, data):
-        """
-        Normalise the provided data with the min and max values in the HDF5 dataset
-        :param data_container: The HDF5 dataset that contains min and max values
-        :param data: The data to normalise
-        :return: Normalised data
-        """
-        size = self.get_input_size()
-        data1 = data[0:size // 2]
-        data2 = data[size // 2:size]
-
-        # Normalise to -1 to 1
-        minimum = data_container.attrs[self.type_minmax_keys[0]]
-        maximum = data_container.attrs[self.type_minmax_keys[1]]
-        data1 -= minimum
-        data1 /= maximum - minimum
-        data1 *= 2
-        data1 -= 1
-
-        minimum = data_container.attrs[self.type_minmax_keys[2]]
-        maximum = data_container.attrs[self.type_minmax_keys[3]]
-        data2 -= minimum
-        data2 /= maximum - minimum
-        data2 *= 2
-        data2 -= 1
-
-        return np.concatenate((data1, data2), axis=0)
-
     def close(self):
         """
         Close the dataset
@@ -241,24 +245,19 @@ class HDF5Dataset(Dataset):
         """
         :return: The size of each input that this dataset will return
         """
-        return int(self.input_size * 2)
+        size = int(self.input_size * 2) - (self.data_slice[0] + self.data_slice[1])
+        return size
 
     def precache(self):
         """
         Add all items in the dataset to the cache
         """
         if not self.use_cache:
-            raise Exception('Cache is not enabled')
+            LOG.warning('precache: Cache is not enabled')
+            return
 
         for i in range(len(self)):
             self.__getitem__(i)
-
-
-def test():
-    sum = 0
-    for d in loader:
-        sum += d.shape[0]
-    return sum
 
 
 if __name__ == '__main__':
@@ -266,21 +265,40 @@ if __name__ == '__main__':
     import time
     from torch.utils.data import DataLoader
 
-    dataset = HDF5Dataset('/home/sam/Projects/rfi_ml/src/gan/At.hdf5', 'abs_angle',
-                          use_cachce=True,
-                          normalise=True,
-                          full_first=True,
-                          polarisations=[0, 1],
-                          frequencies=[0, 1, 2, 3])
+    current_loader = None
 
-    loader = DataLoader(dataset,
-                        batch_size=4096,
-                        shuffle=True,
-                        pin_memory=False,
-                        num_workers=0)
+    def test():
+        sum = 0
+        global current_loader
+        for d in current_loader:
+            sum += d.shape[0]
+            return sum
 
-    start = time.time()
-    dataset.precache()
-    print(time.time() - start)
-    print(timeit.timeit('test()', setup='from __main__ import test', number=100))
 
+    def test_file(name):
+        dataset = HDF5Dataset(name, 'abs_angle',
+                              # use_cache=True,
+                              normalise=True,
+                              full_first=True,
+                              polarisations=[0, 1],
+                              frequencies=[0, 1, 2, 3])
+
+        global current_loader
+        current_loader = DataLoader(dataset,
+                                    batch_size=4096,
+                                    shuffle=True,
+                                    pin_memory=False,
+                                    num_workers=0)
+
+        LOG.info("Test for file: {0}".format(name))
+        LOG.info("Dataset params: {0}".format(dataset.get_configuration()))
+
+        start = time.time()
+        LOG.info("Start time: {0}".format(start))
+        dataset.precache()
+        LOG.info("Precache time: {0}".format(time.time() - start))
+        t = timeit.timeit('test()', setup='from __main__ import test', number=30)
+        LOG.info("Average iteration time: {0}".format(t / 30))
+
+    for f in ['At.hdf5', 'At_1_1_size.hdf5', 'At_auto.hdf5', 'At_none.hdf5']:
+        test_file(f)

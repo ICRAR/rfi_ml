@@ -35,7 +35,9 @@ The main code for pre-processing data and running the GAN can be found in the `g
 
 `REQUEUE_EPOCHS` - If > 0, perform REQUEUE_EPOCHS of training, stop, then run the REQUEUE_SCRIPT (defaults to 0).
 
-`REQUEUE_SCRIPT` - if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
+`REQUEUE_SCRIPT` - If REQUEUE_EPOCHS > 0, this script will be called to requeue the training script.
+
+`CHECKPOINT_USE_SAVE_PROCESS` - If true, model saving will be done in a separate process to speed up the main training loop.
 
 **Example**
 ```text
@@ -53,6 +55,7 @@ ADD_DROPOUT = True
 ADD_NOISE = False
 REQUEUE_EPOCHS = 1
 REQUEUE_SCRIPT = ./requeue.sh
+CHECKPOINT_USE_SAVE_PROCESS = True
 ```
 
 ### Preprocessing
@@ -118,6 +121,9 @@ generator = Generator(4096)
 ### Checkpointing
 `checkpoint.py` contains code for checkpointing the GAN model, optimiser, and epoch state.
 
+Saving checkpoints can utilise a separate process to write out a model state to disk in order to speed up the training loop.
+This can be enabled by setting `CHECKPOINT_USE_SAVE_PROCESS` to `True` in the config file.
+
 **Example Loading**
 ```python
 from torch.optim import Adam
@@ -159,6 +165,25 @@ epoch = 0
 
 # Create the checkpoint in the 'checkpoint_generator' directory
 Checkpoint('generator', generator.state_dict(), optimiser.state_dict(), epoch).save()
+```
+
+**Example Saving using a second process**
+```python
+from torch.optim import Adam
+from gan.checkpoint import Checkpoint
+from gan.models.single_polarisation_single_frequency import Generator
+
+Checkpoint.start_save_process()
+
+# Create the model and optimiser we'll load the checkpoint into
+generator = Generator(1024)
+optimiser = Adam(generator.parameters())
+epoch = 0
+
+# Create the checkpoint in the 'checkpoint_generator' directory
+Checkpoint('generator', generator.state_dict(), optimiser.state_dict(), epoch).save()
+
+Checkpoint.stop_save_process()
 ```
 
 ## Visualisation

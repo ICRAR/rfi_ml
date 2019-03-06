@@ -55,15 +55,15 @@ class Train(object):
         """
         self.config = config
 
-        LOG.info("Creating Data Loader...")
         LOG.info("CUDA version: {0}".format(version.cuda))
+        LOG.info("Creating data loader from path {0}".format(config.FILENAME))
+
         self.data_loader = Data(config.FILENAME,
                                 config.DATA_TYPE,
                                 config.BATCH_SIZE,
                                 polarisations=config.POLARISATIONS,     # Polarisations to use
                                 frequencies=config.FREQUENCIES,         # Frequencies to use
                                 max_inputs=config.MAX_SAMPLES,          # Max inputs per polarisation and frequency
-                                                                        # to use
                                 normalise=config.NORMALISE)             # Normalise inputs
 
         width = self.data_loader.get_input_size()
@@ -137,11 +137,16 @@ class Train(object):
                 epoch += 1
                 epochs_complete += 1
 
-                Checkpoint("generator_autoencoder", self.generator.state_dict(), optimiser.state_dict(), epoch).save()
+                generator_state = self.generator.state_dict()
+                optimiser_state = optimiser.state_dict()
 
+                LOG.info("Saving state")
+                Checkpoint("generator_autoencoder", generator_state, optimiser_state, epoch).save()
+
+                LOG.info("Plotting progress")
                 vis.plot_training(epoch)
                 data, _, _ = iter(self.data_loader).__next__()
-                vis.test_autoencoder(epoch, self.data_loader.get_input_size_first(), self.generator, data.cuda())
+                vis.test_autoencoder(epoch, self.generator, data.cuda())
 
         LOG.info("Saving final generator decoder state")
         Checkpoint("generator_decoder_complete", self.generator.decoder.state_dict()).save()
@@ -216,6 +221,11 @@ class Train(object):
 
         Each time the trainer is run, it creates a new timestamp directory using the current time.
         """
+
+        if self.config.CHECKPOINT_USE_SAVE_PROCESS:
+            LOG.info("Would start save process, but this feature is not working")
+            # Checkpoint.start_save_process()
+
         # When training the GAN, we only want to use the decoder part of the generator.
         generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
         discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.003, betas=(0.5, 0.999))
@@ -347,6 +357,10 @@ class Train(object):
         LOG.info("Training complete, saving final model state")
         Checkpoint("discriminator_complete", self.discriminator.state_dict(), discriminator_optimiser.state_dict(), epoch).save()
         Checkpoint("generator_complete", self.generator.decoder.state_dict(), generator_optimiser.state_dict(), epoch).save()
+
+        if self.config.CHECKPOINT_USE_SAVE_PROCESS:
+            LOG.info("Would stop save process, but this feature is not working")
+            # Checkpoint.stop_save_process()
 
 
 def parse_args():

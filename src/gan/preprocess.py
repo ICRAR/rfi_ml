@@ -126,7 +126,16 @@ class Preprocessor(object):
 
                 p_c_identifier = 'p{0}_c{1}'.format(polarisation, channel)
                 if p_c_identifier not in outfile:
-                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, self.input_size), chunks=True)
+                    # Access is done by reading an x, y block out entirely.
+                    # Chunking is not needed as the data is already stored contiguously
+                    # Tested using (1, 1, self.input_size) chunks, auto chunking, and no chunking
+                    # 2019-03-06 09:04:38,043:INFO:__main__:Test for file: At_1_1_size.hdf5
+                    # 2019-03-06 09:05:48,477:INFO:__main__:Average iteration time: 2.3477754953333414
+                    # 2019-03-06 09:05:48,479:INFO:__main__:Test for file: At_auto.hdf5
+                    # 2019-03-06 09:08:37,778:INFO:__main__:Average iteration time: 5.6433112589
+                    # 2019-03-06 09:08:37,779:INFO:__main__:Test for file: At_none.hdf5
+                    # 2019-03-06 09:09:40,871:INFO:__main__:Average iteration time: 2.1030327905333253
+                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, self.input_size))
 
                 for fft_batch_id in range(ffts):
                     fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]

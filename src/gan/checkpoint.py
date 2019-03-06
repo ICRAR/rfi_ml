@@ -22,9 +22,13 @@
 #
 
 import torch
+import copy
+from collections import OrderedDict
 import os
 import datetime
 import logging
+
+from jobs import JobQueue
 
 LOG = logging.getLogger(__name__)
 
@@ -38,6 +42,41 @@ class Checkpoint(object):
 
     CHECKPOINT_PREFIX = 'checkpoint_'
     MODEL_PREFIX = 'model_save_'
+    job_queue = None
+
+    class CheckpointSaver(object):
+        def __init__(self, save_path, old_checkpoints, d):
+            self.dict = d
+            self.old_checkpoints = old_checkpoints
+            self.save_path = save_path
+
+        def __call__(self):
+            # Remove all old checkpoints and only keep the latest
+            for old_checkpoint in self.old_checkpoints:
+                os.remove(old_checkpoint)
+
+            torch.save(self.dict, self.save_path)
+
+    @classmethod
+    def start_save_process(cls):
+        cls.job_queue = JobQueue(1)  # 1 process to perform the saves because it can take a while on the main thread
+
+    @classmethod
+    def stop_save_process(cls):
+        cls.job_queue.join()
+        cls.job_queue = None
+
+    @classmethod
+    def is_using_save_process(cls):
+        return cls.job_queue is not None
+
+    @classmethod
+    def _submit_save(cls, path, old_checkpoints, state):
+        saver = cls.CheckpointSaver(path, old_checkpoints, state)
+        if cls.is_using_save_process():
+            cls.job_queue.submit(saver)
+        else:
+            saver()
 
     def __init__(self, filename, module_state=None, optimiser_state=None, epoch=None):
         """
@@ -93,15 +132,11 @@ class Checkpoint(object):
 
         os.makedirs(self.directory, exist_ok=True)
 
-        # Remove all old checkpoints and only keep the latest
-        for file in self._get_checkpoint_files():
-            os.remove(file)
-
-        torch.save({
+        self._submit_save(save_path, self._get_checkpoint_files(), {
             'module_state': self.module_state,
             'optimiser_state': self.optimiser_state,
-            'epoch': self.epoch,
-        }, save_path)
+            'epoch': self.epoch
+        })
 
     def _get_checkpoint_files(self):
         """
