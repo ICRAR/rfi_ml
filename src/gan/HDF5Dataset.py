@@ -95,7 +95,7 @@ class HDF5Dataset(Dataset):
         self.second_type_index = self.type_index_map[types[1]]
 
         # Keys for getting the attribute names of the min and max values
-        self.type_minmax_keys = ['{0}_{1}'.format(m, k) for k, m in itertools.product(self.type.split('_'), ['min', 'max'])]
+        self.type_minmax_keys = ['{0}_{1}'.format(m, k) for k, m in itertools.product(types, ['min', 'max'])]
 
         # Number of FFTs contained within the file
         self.fft_count = get_attribute('fft_count')
@@ -247,6 +247,15 @@ class HDF5Dataset(Dataset):
         """
         size = int(self.input_size * 2) - (self.data_slice[0] + self.data_slice[1])
         return size
+
+    def get_labels(self):
+        """
+        Get the data type labels for the data inputs.
+        e.g. if gan_config.settings.DATA_TYPE == 'real_imag', this will return ['real', 'imag']
+        :return: List of two labels for the data inputs.
+        :rtype list
+        """
+        return self.type.split('_')
 
     def precache(self):
         """

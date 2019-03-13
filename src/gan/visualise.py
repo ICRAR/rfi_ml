@@ -89,21 +89,22 @@ class PdfPlotter(object):
 
 
 class AutoEncoderTest(object):
-    def __init__(self, directory, out, real):
+    def __init__(self, directory, out, real, labels):
         self.directory = directory
         self.out = out
         self.real = real
+        self.labels = labels
 
     def __call__(self, *args, **kwargs):
         # First half of data is real, second is imaginary. Split these into two plots.
         with PdfPlotter(os.path.join(self.directory, "plots.pdf"), split=True) as pdf:
             for i in range(min(5, self.out.shape[0])):
                 base = "Generator Output {0}".format(i)
-                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
                 base = "Real Output {0}".format(i)
-                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
                 base = "Output Real Comparison {0}".format(i)
-                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, "Real"), "{0}: {1}".format(base, "Imaginary")])
+                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
 
 
 class GANTest(object):
@@ -190,11 +191,12 @@ class Visualiser(object):
         generator.train()
         discriminator.train()
 
-    def test_autoencoder(self, epoch, generator, real):
+    def test_autoencoder(self, epoch, generator, real, labels):
         generator.eval()
         self.queue.submit(AutoEncoderTest(directory=self._get_directory(epoch),
                                           out=generator(real[:10]).cpu().data.numpy(),
-                                          real=real[:10].cpu().data.numpy()))
+                                          real=real[:10].cpu().data.numpy(),
+                                          labels=labels))
         generator.train()
 
     def plot_training(self, epoch):

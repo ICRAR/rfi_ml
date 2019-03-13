@@ -88,9 +88,22 @@ class Checkpoint(object):
         :param epoch: (optional) Current epoch to save.
         """
         self.directory = os.path.abspath('./{0}{1}'.format(self.CHECKPOINT_PREFIX, filename))
+        self.filename = filename
         self.module_state = module_state
         self.optimiser_state = optimiser_state
         self.epoch = epoch
+
+    def set(self, module_state, optimiser_state, epoch):
+        """
+        Set the checkpoint state in preparation for saving
+        :param module_state: Current state of the torch model to save.
+        :param optimiser_state: Current optimiser state to save.
+        :param epoch: Current epoch to save.
+        """
+        self.module_state = module_state
+        self.optimiser_state = optimiser_state
+        self.epoch = epoch
+        return self
 
     def load(self):
         """
@@ -132,11 +145,13 @@ class Checkpoint(object):
 
         os.makedirs(self.directory, exist_ok=True)
 
-        self._submit_save(save_path, self._get_checkpoint_files(), {
-            'module_state': self.module_state,
-            'optimiser_state': self.optimiser_state,
-            'epoch': self.epoch
-        })
+        for old_checkpoint in self._get_checkpoint_files():
+            os.remove(old_checkpoint)
+
+        LOG.info("Saving: {0}".format(save_path))
+
+        state = {'module_state': self.module_state, 'optimiser_state': self.optimiser_state, 'epoch': self.epoch}
+        torch.save(state, save_path)
 
     def _get_checkpoint_files(self):
         """

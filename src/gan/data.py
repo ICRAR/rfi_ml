@@ -89,6 +89,15 @@ class Data(object):
         """
         return zip(self.data, self.noise1, self.noise2)
 
+    def get_labels(self):
+        """
+        Get the data type labels for the data inputs.
+        e.g. if gan_config.settings.DATA_TYPE == 'real_imag', this will return ['real', 'imag']
+        :return: List of two labels for the data inputs.
+        :rtype list
+        """
+        return self.hdf5_dataset.get_labels()
+
     def get_input_size(self):
         """
         Get the width of a single NN input that will be returned by this dataset.
@@ -96,16 +105,6 @@ class Data(object):
         :rtype int
         """
         return self.hdf5_dataset.get_input_size()
-
-    def get_input_size_first(self):
-        """
-        Gets the width of the first part of the input (real / absolute values)
-        This may be half of the size of the second input part, because the real / absolute values are
-        mirrored around their centre.
-        :return: Width of the first part of the input
-        :rtype int
-        """
-        return self.hdf5_dataset.get_input_size_first()
 
     def close(self):
         """
