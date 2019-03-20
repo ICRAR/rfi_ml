@@ -13,8 +13,6 @@ The main code for pre-processing data and running the GAN can be found in the `g
 
 `FILENAME` - Path to HDF5 file to load data from.
 
-`DATA_TYPE` - Type of data to read from the HDF5 files. Either 'real_imag' or 'abs_angle' (defaults to 'reall_imag).
-
 `MAX_EPOCHS` - Max number of epochs to train the GAN for (defaults to 60).
 
 `MAX_GENERATOR_AUTOENCODER_EPOCHS` - Max number of epochs to train the generator autoencoder for (defaults to 60).
@@ -41,7 +39,6 @@ The main code for pre-processing data and running the GAN can be found in the `g
 ```text
 USE_CUDA = True
 FILENAME = At.hdf5
-DATA_TYPE = real_imag
 MAX_EPOCHS = 60
 MAX_GENERATOR_AUTOENCODER_EPOCHS = 5
 MAX_SAMPLES = 0

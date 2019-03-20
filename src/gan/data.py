@@ -38,7 +38,7 @@ class Data(object):
     file along with two generated gaussian noise datasets
     """
 
-    def __init__(self, filename, data_type, batch_size, **kwargs):
+    def __init__(self, filename, batch_size, **kwargs):
         """
         Create a new dataset from the provided HDF5 file.
         :param str filename: The HDF5 file to load the data from.
@@ -46,14 +46,16 @@ class Data(object):
         :param int batch_size: Number of NN inputs to include in each batch.
         :param kwargs: kwargs to pass to the :func:`~gan.HDF5Dataset` constructor.
         """
-        self.hdf5_dataset = HDF5Dataset(filename, data_type, **kwargs)
+        self.hdf5_dataset = HDF5Dataset(filename, **kwargs)
 
         LOG.info('Dataset params: {0}'.format(self.hdf5_dataset.get_configuration()))
         LOG.info('Data loader params: {0}'.format({
             'filename': filename,
-            'batch_size': batch_size,
+            'batch_size': batch_size
         }))
         LOG.info('Number of NN inputs available with this configuration {0}'.format(len(self.hdf5_dataset)))
+
+        width = self.get_input_shape()[1]
 
         self.data = DataLoader(self.hdf5_dataset,
                                batch_size=batch_size,
@@ -61,13 +63,13 @@ class Data(object):
                                pin_memory=False,
                                num_workers=0)
 
-        self.noise1 = DataLoader(NoiseDataset(self.get_input_size(), len(self.hdf5_dataset)),
+        self.noise1 = DataLoader(NoiseDataset(width, len(self.hdf5_dataset)),
                                  batch_size=batch_size,
                                  shuffle=True,
                                  pin_memory=False,
                                  num_workers=0)
 
-        self.noise2 = DataLoader(NoiseDataset(self.get_input_size(), len(self.hdf5_dataset)),
+        self.noise2 = DataLoader(NoiseDataset(width, len(self.hdf5_dataset)),
                                  batch_size=batch_size,
                                  shuffle=True,
                                  pin_memory=False,
@@ -89,22 +91,13 @@ class Data(object):
         """
         return zip(self.data, self.noise1, self.noise2)
 
-    def get_labels(self):
+    def get_input_shape(self):
         """
-        Get the data type labels for the data inputs.
-        e.g. if gan_config.settings.DATA_TYPE == 'real_imag', this will return ['real', 'imag']
-        :return: List of two labels for the data inputs.
-        :rtype list
-        """
-        return self.hdf5_dataset.get_labels()
-
-    def get_input_size(self):
-        """
-        Get the width of a single NN input that will be returned by this dataset.
+        Get the shape of a single input returned from this dataset
         :return: Width of a single input
         :rtype int
         """
-        return self.hdf5_dataset.get_input_size()
+        return self.hdf5_dataset.get_input_shape()
 
     def close(self):
         """

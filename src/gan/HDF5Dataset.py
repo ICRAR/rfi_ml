@@ -22,8 +22,6 @@
 #
 
 import h5py
-import itertools
-import numpy as np
 import logging
 from torch.utils.data import Dataset
 
@@ -37,19 +35,15 @@ class HDF5Dataset(Dataset):
     that was exported from an LBA file using 'preprocess.py'
     """
 
-    valid_types = {'abs_angle', 'real_imag'}
-    type_index_map = {'real': 0, 'imag': 1, 'abs': 2, 'angle': 3}
-
     @staticmethod
     def get_index(index, length, possibilities):
         part_size = length // len(possibilities)
         return possibilities[index // part_size], index % part_size
 
-    def __init__(self, filename, data_type, **kwargs):
+    def __init__(self, filename, **kwargs):
         """
         Initialises the HDF5 dataset
         :param filename: The filename to read the dataset from
-        :param data_type: What type of data should be read from the file? 'angle_abs' or 'real_imag'
         :param kwargs:
             polarisations: A list of polarisations (0 to 1) that should be included in the data
             frequencies: A list of frequencies (0 to 3) that should be included in the data
@@ -85,18 +79,6 @@ class HDF5Dataset(Dataset):
                 raise RuntimeError('{0} should be an integer'.format(name))
             return value
 
-        # Data type to extract from the hdf5
-        self.type = data_type
-        if self.type not in self.valid_types:
-            raise RuntimeError('type should be one of {0}, not {1}'.format(self.valid_types, self.type))
-
-        types = self.type.split('_')
-        self.first_type_index = self.type_index_map[types[0]]
-        self.second_type_index = self.type_index_map[types[1]]
-
-        # Keys for getting the attribute names of the min and max values
-        self.type_minmax_keys = ['{0}_{1}'.format(m, k) for k, m in itertools.product(types, ['min', 'max'])]
-
         # Number of FFTs contained within the file
         self.fft_count = get_attribute('fft_count')
 
@@ -109,6 +91,9 @@ class HDF5Dataset(Dataset):
         # Size of each NN input
         self.input_size = get_attribute('input_size')
 
+        # Cutoff used. How many items at the start and end of the FFT were dropped.
+        self.cutoff = get_attribute('cutoff')
+
         # User specified they only want these polarisations
         self.polarisations = get_ints_argument('polarisations', [0, 1])
 
@@ -117,23 +102,6 @@ class HDF5Dataset(Dataset):
 
         # User wants to cache data from the HDF5 file instead of re-reading it
         self.use_cache = kwargs.get('use_cache', False)
-
-        # Slice data_slice[0] elements from the start of the input, and data_slice[1] from the end.
-        # This can be used to remove FFT artifacts
-        self.data_slice = kwargs.get('data_slice', (0, 0))
-        slice_type = type(self.data_slice)
-        if slice_type == tuple:
-            length = len(self.data_slice)
-            if length == 1:
-                self.data_slice = (self.data_slice[0], 0)
-            elif length != 2:
-                raise RuntimeError('data_slice must be a tuple of length 1 or 2')
-            if type(self.data_slice[0]) != int or type(self.data_slice[1]) != int:
-                raise RuntimeError('data_slice elements must be ints')
-        elif slice_type == int:
-            self.data_slice = (self.data_slice, self.data_slice)
-        else:
-            raise RuntimeError('data_slice must be a tuple or an int')
 
         # User specified they only want to use this many NN inputs from the entire dataset
         self.max_inputs = get_int_argument('max_inputs')
@@ -174,28 +142,25 @@ class HDF5Dataset(Dataset):
         c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
         key = 'p{0}_c{1}'.format(p, c)
         data_container = self.hdf5[key]
-        data_first = data_container[index][self.first_type_index]
-        data_first = data_first[self.data_slice[0]:data_first.shape[0] - self.data_slice[1]]
-        data_second = data_container[index][self.second_type_index]
-        data_second = data_second[self.data_slice[0]:data_second.shape[0] - self.data_slice[1]]
+
+        data = data_container[index]
 
         if self.normalise:
+            # Normalise to 0 to 1 ?
+            minimum = data_container.attrs['min_abs']
+            maximum = data_container.attrs['max_abs']
+            data[0] -= minimum
+            data[0] /= maximum - minimum
+            data[0] *= 2
+            data[0] -= 1
+
             # Normalise to -1 to 1
-            minimum = data_container.attrs[self.type_minmax_keys[0]]
-            maximum = data_container.attrs[self.type_minmax_keys[1]]
-            data_first -= minimum
-            data_first /= maximum - minimum
-            data_first *= 2
-            data_first -= 1
-
-            minimum = data_container.attrs[self.type_minmax_keys[2]]
-            maximum = data_container.attrs[self.type_minmax_keys[3]]
-            data_second -= minimum
-            data_second /= maximum - minimum
-            data_second *= 2
-            data_second -= 1
-
-        data = np.concatenate((data_first, data_second))
+            minimum = data_container.attrs['min_angle']
+            maximum = data_container.attrs['max_angle']
+            data[1] -= minimum
+            data[1] /= maximum - minimum
+            data[1] *= 2
+            data[1] -= 1
 
         if self.use_cache:
             self.cache[i] = data
@@ -217,10 +182,8 @@ class HDF5Dataset(Dataset):
             'frequencies': self.frequencies,
             'max_inputs': self.max_inputs,
             'normalise': self.normalise,
-            'type': self.type,
-            'input_size': self.get_input_size(),
-            'first_type_index': self.first_type_index,
-            'second_type_index': self.second_type_index
+            'input_shape': self.get_input_shape(),
+            'cutoff': self.cutoff
         }
 
     def get_polarisation_and_channel(self, index):
@@ -241,21 +204,11 @@ class HDF5Dataset(Dataset):
         """
         self.hdf5.close()
 
-    def get_input_size(self):
+    def get_input_shape(self):
         """
-        :return: The size of each input that this dataset will return
+        :return: The shape of each input returned by this dataset
         """
-        size = int(self.input_size * 2) - (self.data_slice[0] + self.data_slice[1])
-        return size
-
-    def get_labels(self):
-        """
-        Get the data type labels for the data inputs.
-        e.g. if gan_config.settings.DATA_TYPE == 'real_imag', this will return ['real', 'imag']
-        :return: List of two labels for the data inputs.
-        :rtype list
-        """
-        return self.type.split('_')
+        return 2, int(self.input_size - self.cutoff * 2)
 
     def precache(self):
         """
@@ -285,7 +238,7 @@ if __name__ == '__main__':
 
 
     def test_file(name):
-        dataset = HDF5Dataset(name, 'abs_angle',
+        dataset = HDF5Dataset(name,
                               # use_cache=True,
                               normalise=True,
                               full_first=True,
@@ -309,5 +262,5 @@ if __name__ == '__main__':
         t = timeit.timeit('test()', setup='from __main__ import test', number=30)
         LOG.info("Average iteration time: {0}".format(t / 30))
 
-    for f in ['At.hdf5', 'At_1_1_size.hdf5', 'At_auto.hdf5', 'At_none.hdf5']:
+    for f in ['At_1000.hdf5']:
         test_file(f)

@@ -68,9 +68,9 @@ class PdfPlotter(object):
         def plot_split(data, title):
             if self.split:
                 plt.subplot(1, 2, 1)
-                plot_single(data[:data.shape[0] // 2], title[0])
+                plot_single(data[0], title[0])
                 plt.subplot(1, 2, 2)
-                plot_single(data[data.shape[0] // 2:], title[1])
+                plot_single(data[1], title[1])
                 plt.tight_layout()
             else:
                 plot_single(data, title)
@@ -89,27 +89,27 @@ class PdfPlotter(object):
 
 
 class AutoEncoderTest(object):
-    def __init__(self, directory, out, real, labels):
+    def __init__(self, directory, epoch, out, real):
         self.directory = directory
+        self.epoch = epoch
         self.out = out
         self.real = real
-        self.labels = labels
 
     def __call__(self, *args, **kwargs):
-        # First half of data is real, second is imaginary. Split these into two plots.
-        with PdfPlotter(os.path.join(self.directory, "plots.pdf"), split=True) as pdf:
+        with PdfPlotter(os.path.join(self.directory, "{0}_plots.pdf".format(self.epoch)), split=True) as pdf:
             for i in range(min(5, self.out.shape[0])):
-                base = "Generator Output {0}".format(i)
-                pdf.plot_output(self.out[i], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
+                base = "Autoencoder Output {0}".format(i)
+                pdf.plot_output(self.out[i], ["{0}: absolute".format(base), "{0}: angle".format(base)])
                 base = "Real Output {0}".format(i)
-                pdf.plot_output(self.real[i], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
+                pdf.plot_output(self.real[i], ["{0}: absolute".format(base,), "{0}: angle".format(base)])
                 base = "Output Real Comparison {0}".format(i)
-                pdf.plot_output([self.real[i], self.out[i]], ["{0}: {1}".format(base, self.labels[0]), "{0}: {1}".format(base, self.labels[1])])
+                pdf.plot_output([self.real[i], self.out[i]], ["{0}: absolute".format(base), "{0}: angle".format(base)])
 
 
 class GANTest(object):
-    def __init__(self, directory, size_first, gen_out, real_out, discriminator_out, discriminator_real):
+    def __init__(self, directory, epoch, size_first, gen_out, real_out, discriminator_out, discriminator_real):
         self.directory = directory
+        self.epoch = epoch
         self.size_first = size_first
         self.gen_out = gen_out
         self.real_out = real_out
@@ -117,7 +117,7 @@ class GANTest(object):
         self.discriminator_real = discriminator_real
 
     def __call__(self, *args, **kwargs):
-        with PdfPlotter(os.path.join(self.directory, "plots.pdf")) as pdf:
+        with PdfPlotter(os.path.join(self.directory, "{0}_plots.pdf".format(self.epoch))) as pdf:
             for i in range(min(10, self.gen_out.shape[0], self.real_out.shape[0])):
                 pdf.plot_output(self.gen_out[i], "Generator Output {0}".format(i))
                 pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
@@ -135,14 +135,15 @@ class GANTest(object):
 
 
 class PlotLearning(object):
-    def __init__(self, directory, d_loss_real, d_loss_fake, g_loss):
+    def __init__(self, directory, epoch, d_loss_real, d_loss_fake, g_loss):
         self.directory = directory
+        self.epoch = epoch
         self.d_loss_real = d_loss_real
         self.d_loss_fake = d_loss_fake
         self.g_loss = g_loss
 
     def __call__(self, *args, **kwargs):
-        with PdfPlotter(os.path.join(self.directory, "training.pdf")) as pdf:
+        with PdfPlotter(os.path.join(self.directory, "{0}_training.pdf".format(self.epoch))) as pdf:
             if len(self.d_loss_real) > 0:
                 pdf.plot_learning(self.d_loss_real, "Discriminator Loss Real")
             if len(self.d_loss_fake) > 0:
@@ -165,10 +166,9 @@ class Visualiser(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.queue.join()
 
-    def _get_directory(self, epoch):
-        directory = os.path.join(self.base_directory, "{0}".format(epoch))
-        os.makedirs(directory, exist_ok=True)
-        return directory
+    def _get_directory(self):
+        os.makedirs(self.base_directory, exist_ok=True)
+        return self.base_directory
 
     def step(self, d_loss_real, d_loss_fake, g_loss):
         self.d_loss_real.append(d_loss_real)
@@ -182,7 +182,8 @@ class Visualiser(object):
         generator.eval()
         discriminator.eval()
         out = generator(noise)
-        self.queue.submit(GANTest(directory=self._get_directory(epoch),
+        self.queue.submit(GANTest(directory=self._get_directory(),
+                                  epoch=epoch,
                                   size_first=size_first,
                                   gen_out=out.cpu().data.numpy(),
                                   real_out=real.cpu().data.numpy(),
@@ -191,16 +192,17 @@ class Visualiser(object):
         generator.train()
         discriminator.train()
 
-    def test_autoencoder(self, epoch, generator, real, labels):
+    def test_autoencoder(self, epoch, generator, real):
         generator.eval()
-        self.queue.submit(AutoEncoderTest(directory=self._get_directory(epoch),
+        self.queue.submit(AutoEncoderTest(directory=self._get_directory(),
+                                          epoch=epoch,
                                           out=generator(real[:10]).cpu().data.numpy(),
-                                          real=real[:10].cpu().data.numpy(),
-                                          labels=labels))
+                                          real=real[:10].cpu().data.numpy()))
         generator.train()
 
     def plot_training(self, epoch):
-        self.queue.submit(PlotLearning(directory=self._get_directory(epoch),
+        self.queue.submit(PlotLearning(directory=self._get_directory(),
+                                       epoch=epoch,
                                        d_loss_real=self.d_loss_real,
                                        d_loss_fake=self.d_loss_fake,
                                        g_loss=self.g_loss))

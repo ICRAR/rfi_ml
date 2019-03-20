@@ -61,15 +61,15 @@ class Train(object):
         LOG.info("Creating data loader from path {0}".format(config.FILENAME))
 
         self.data_loader = Data(config.FILENAME,
-                                config.DATA_TYPE,
                                 config.BATCH_SIZE,
                                 polarisations=config.POLARISATIONS,     # Polarisations to use
                                 frequencies=config.FREQUENCIES,         # Frequencies to use
                                 max_inputs=config.MAX_SAMPLES,          # Max inputs per polarisation and frequency
                                 normalise=config.NORMALISE)             # Normalise inputs
 
-        width = self.data_loader.get_input_size()
-        LOG.info("Creating models with input width {0}".format(width))
+        shape = self.data_loader.get_input_shape()
+        width = shape[1]
+        LOG.info("Creating models with input shape {0}".format(shape))
         self._autoencoder = Autoencoder(width)
         self._discriminator = Discriminator(width)
         # TODO: Get correct input and output widths for generator
@@ -148,12 +148,11 @@ class Train(object):
         criterion = nn.SmoothL1Loss()
 
         optimiser = optim.Adam(self.generator.parameters(), lr=0.00003, betas=(0.5, 0.999))
-        filename = "autoencoder_{0}".format(self.config.DATA_TYPE)
-        checkpoint = Checkpoint(filename)
+        checkpoint = Checkpoint("autoencoder")
         epoch = 0
         if checkpoint.load():
             epoch = self.load_state(checkpoint, self.autoencoder, optimiser)
-            if epoch >= self.config.MAX_AUTOENCODER_EPOCHS:
+            if epoch is not None and epoch >= self.config.MAX_AUTOENCODER_EPOCHS:
                 LOG.info("Autoencoder already trained")
                 return True
             else:
@@ -164,7 +163,7 @@ class Train(object):
         # Train autoencoder
         self._autoencoder.set_mode(Autoencoder.Mode.AUTOENCODER)
 
-        vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], filename, str(datetime.now()))
+        vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "autoencoder", str(datetime.now()))
         with Visualiser(vis_path) as vis:
             epochs_complete = 0
             while epoch < self.config.MAX_AUTOENCODER_EPOCHS:
@@ -201,7 +200,7 @@ class Train(object):
                 LOG.info("Plotting autoencoder progress")
                 vis.plot_training(epoch)
                 data, _, _ = iter(self.data_loader).__next__()
-                vis.test_autoencoder(epoch, self.autoencoder, data.cuda(), self.data_loader.get_labels())
+                vis.test_autoencoder(epoch, self.autoencoder, data.cuda())
 
         LOG.info("Autoencoder training complete")
         return True  # Training complete
@@ -209,6 +208,7 @@ class Train(object):
     def _train_gan(self):
         """
         TODO: Add in autoencoder to perform dimensionality reduction on data
+        TODO: Not working yet - trying to work out good autoencoder model first
         :return:
         """
 
@@ -216,16 +216,16 @@ class Train(object):
 
         discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.003, betas=(0.5, 0.999))
         discriminator_scheduler = optim.lr_scheduler.LambdaLR(discriminator_optimiser, lambda epoch: 0.97 ** epoch)
-        discriminator_checkpoint = Checkpoint("discriminator_{0}".format(self.config.DATA_TYPE))
+        discriminator_checkpoint = Checkpoint("discriminator")
         discriminator_epoch = 0
         if discriminator_checkpoint.load():
             discriminator_epoch = self.load_state(discriminator_checkpoint, self.discriminator, discriminator_optimiser)
         else:
             LOG.info('Discriminator checkpoint not found')
 
-        generator_optimiser = optim.Adam(self.generator.decoder.parameters(), lr=0.003, betas=(0.5, 0.999))
+        generator_optimiser = optim.Adam(self.generator.parameters(), lr=0.003, betas=(0.5, 0.999))
         generator_scheduler = optim.lr_scheduler.LambdaLR(generator_optimiser, lambda epoch: 0.97 ** epoch)
-        generator_checkpoint = Checkpoint("generator_{0}".format(self.config.DATA_TYPE))
+        generator_checkpoint = Checkpoint("generator")
         generator_epoch = 0
         if generator_checkpoint.load():
             generator_epoch = self.load_state(generator_checkpoint, self.generator, generator_optimiser)
@@ -241,7 +241,7 @@ class Train(object):
             LOG.info("Discriminator loaded at epoch {0}".format(discriminator_epoch))
             LOG.info("Training from lowest epoch {0}".format(epoch))
 
-        vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "gan_{0}".format(self.config.DATA_TYPE), str(datetime.now()))
+        vis_path = os.path.join(os.path.splitext(self.config.FILENAME)[0], "gan", str(datetime.now()))
         with Visualiser(vis_path) as vis:
             real_labels = None  # all 1s
             fake_labels = None  # all 0s
@@ -344,7 +344,7 @@ class Train(object):
             # Autoencoder training incomplete
             return
 
-        self._train_gan()
+        #self._train_gan()
 
 
 def parse_args():

@@ -38,7 +38,6 @@ class Config(object):
     defaults = {
         'USE_CUDA':                         Default(True, bool),  # True to train using the GPU, false to use the CPU
         'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),  # HDF5 file to load data from
-        'DATA_TYPE':                        Default('real_imag', str),  # Type of data to read from the HDF5 files. Either 'real_imag' or 'abs_angle'
         'MAX_EPOCHS':                       Default(60, int),  # Max number of epochs to train the GAN for
         'MAX_AUTOENCODER_EPOCHS': Default(60, int),  # Max number of epochs to train the autoencoder for
         'MAX_SAMPLES':                      Default(0, int),  # Maximum number of inputs to train on. Set to 0 for unlimited

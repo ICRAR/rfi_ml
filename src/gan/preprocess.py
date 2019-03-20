@@ -62,7 +62,7 @@ class Preprocessor(object):
     if desired.
     """
 
-    def __init__(self, filename, outfile, fft_window=2048, max_ffts=0):
+    def __init__(self, filename, outfile, fft_window=2048, max_ffts=0, cutoff=10):
         """
         Construct a new preprocessor
         :param str filename: The LBA file to read data from
@@ -72,11 +72,14 @@ class Preprocessor(object):
         :param int max_ffts: (optional) Specifies the maximum number of FFTs to create from the lba file. Each FFT is a
                     single GAN input, so this specifies the number of GAN inputs to create. Set to 0 to create as many
                     inputs as possible from the lba file
+        :param int cutoff: (optional) Specifies the number of elements at the start and end of the FFT to drop to avoid
+                    artifacts.
         """
         self.file = filename
         self.outfile = outfile
         self.fft_window = fft_window
         self.max_ffts = max_ffts
+        self.cutoff = cutoff
         self.ffts_output = 0
 
         # rfft output sizes depend on even or odd
@@ -135,35 +138,19 @@ class Preprocessor(object):
                     # 2019-03-06 09:08:37,778:INFO:__main__:Average iteration time: 5.6433112589
                     # 2019-03-06 09:08:37,779:INFO:__main__:Test for file: At_none.hdf5
                     # 2019-03-06 09:09:40,871:INFO:__main__:Average iteration time: 2.1030327905333253
-                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 4, self.input_size))
+                    outfile.create_dataset(p_c_identifier, shape=(self.max_ffts, 2, self.input_size - self.cutoff * 2))
 
                 for fft_batch_id in range(ffts):
                     fft_batch = samples[fft_batch_id * self.fft_window: (fft_batch_id + 1) * self.fft_window]
-                    fft = np.fft.rfft(fft_batch[:, channel, polarisation])
-
-                    real = fft.real
-                    imag = fft.imag
+                    fft = np.fft.rfft(fft_batch[:, channel, polarisation])[self.cutoff:-self.cutoff]
 
                     absolute = np.abs(fft)
                     angle = np.angle(fft)
 
-                    outfile[p_c_identifier][self.ffts_output + fft_batch_id] = np.stack((real, imag, absolute, angle))
+                    outfile[p_c_identifier][self.ffts_output + fft_batch_id] = np.stack((absolute, angle))
 
                     # Store a minimum for all items in a particular channel and polarisation,
                     # and also store a minimum for all items
-                    minimum = np.min(real)
-                    self.update_attr(minimum, outfile[p_c_identifier], 'min_real', min)
-                    self.update_attr(minimum, outfile, 'min_real', min)
-                    maximum = np.max(real)
-                    self.update_attr(maximum, outfile[p_c_identifier], 'max_real', max)
-                    self.update_attr(maximum, outfile, 'max_real', max)
-
-                    minimum = np.min(imag)
-                    self.update_attr(minimum, outfile[p_c_identifier], 'min_imag', min)
-                    self.update_attr(minimum, outfile, 'min_imag', min)
-                    maximum = np.max(imag)
-                    self.update_attr(maximum, outfile[p_c_identifier], 'max_imag', max)
-                    self.update_attr(maximum, outfile, 'max_imag', max)
 
                     minimum = np.min(absolute)
                     self.update_attr(minimum, outfile[p_c_identifier], 'min_abs', min)
@@ -205,6 +192,7 @@ class Preprocessor(object):
                 outfile.attrs['samples'] = max_samples
                 outfile.attrs['fft_count'] = max_ffts
                 outfile.attrs['input_size'] = self.input_size
+                outfile.attrs['cutoff'] = self.cutoff
                 while samples_read < max_samples:
                     remaining_ffts = (max_samples - samples_read) // self.fft_window
                     LOG.info("Processed {0} out of {1} fft windows".format(max_ffts - remaining_ffts, max_ffts))
@@ -238,6 +226,10 @@ def parse_args():
                         type=int,
                         help='Max number of FFTs create. 0 is use all available data',
                         default=0)
+    parser.add_argument('--fft_cutoff',
+                        type=int,
+                        help='Number of elements at the start and the end of the FFT to drop to avoid artifacts',
+                        default=0)
 
     return vars(parser.parse_args())
 
@@ -246,7 +238,7 @@ if __name__ == '__main__':
     args = parse_args()
     LOG.info('Starting with args: {0}'.format(args))
     try:
-        preprocessor = Preprocessor(args['file'], args['outfile'], args['fft_window'], args['max_ffts'])
+        preprocessor = Preprocessor(args['file'], args['outfile'], args['fft_window'], args['max_ffts'], args['fft_cutoff'])
         preprocessor()
     except RuntimeError as e:
         LOG.exception("Failed to run preprocessor", e)

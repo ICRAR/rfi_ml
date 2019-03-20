@@ -21,6 +21,7 @@
 #    MA 02111-1307  USA
 #
 
+import torch
 import torch.nn as nn
 from enum import Enum
 
@@ -45,29 +46,74 @@ class Autoencoder(nn.Sequential):
         """
         super(Autoencoder, self).__init__()
 
-        def layer(in_size, out_size, dropout, final=False):
+        def layer(in_size, out_size, dropout, activation, final=False):
             layers = [
-                nn.Linear(in_size, out_size)
+                nn.Linear(in_size, out_size),
+                #activation()
             ]
 
             if not final:
-                layers.append(nn.Softsign())
-                layers.append(nn.Dropout(dropout))
+                pass
+                #layers.append(nn.AlphaDropout(dropout))
 
             return layers
 
-        hidden1 = int(width * 0.9)
-        hidden2 = int(width * 0.8)
+        hidden1 = int(width * 0.95)
+        hidden2 = int(width * 0.9)
+        hidden3 = int(width * 0.85)
+        hidden4 = int(width * 0.8)
 
         self.encoder = nn.Sequential(
-            *layer(width, hidden1, 0.1),
-            *layer(hidden1, hidden2, 0.1)
+            *layer(width, width, 0.0, nn.SELU),
+            #*layer(hidden1, hidden2, 0.1, nn.SELU),
+            #*layer(hidden2, hidden3, 0.1, nn.SELU),
+            #*layer(hidden3, hidden4, 0.1, nn.SELU),
         )
 
         self.decoder = nn.Sequential(
-            *layer(hidden2, hidden1, 0.1),
-            *layer(hidden1, width, 0.1, final=True)
+            #*layer(hidden4, hidden3, 0.1, nn.SELU),
+            #*layer(hidden3, hidden2, 0.1, nn.SELU),
+            #*layer(hidden2, hidden1, 0.1, nn.SELU),
+            *layer(width, width, 0.0, nn.SELU, final=True),
         )
+
+        """
+        self.encoder_absolute = nn.Sequential(
+            *layer(width, hidden1, 0.0, nn.ReLU),
+            *layer(hidden1, hidden2, 0.0, nn.ReLU),
+            *layer(hidden2, hidden3, 0.0, nn.ReLU),
+            *layer(hidden3, hidden4, 0.0, nn.ReLU),
+        )
+
+        self.encoder_angle = nn.Sequential(
+            *layer(width, hidden1, 0.0, nn.Softsign),
+            *layer(hidden1, hidden2, 0.0, nn.Softsign),
+            *layer(hidden2, hidden3, 0.0, nn.Softsign),
+            *layer(hidden3, hidden4, 0.0, nn.Softsign),
+        )
+
+        self.decoder_absolute = nn.Sequential(
+            *layer(hidden4, hidden3, 0.0, nn.ReLU),
+            *layer(hidden3, hidden2, 0.0, nn.ReLU),
+            *layer(hidden2, hidden1, 0.0, nn.ReLU),
+            *layer(hidden1, width, 0.0, nn.ReLU),
+        )
+
+        self.decoder_angle = nn.Sequential(
+            *layer(hidden4, hidden3, 0.0, nn.Softsign),
+            *layer(hidden3, hidden2, 0.0, nn.Softsign),
+            *layer(hidden2, hidden1, 0.0, nn.Softsign),
+            *layer(hidden1, width, 0.0, nn.Softsign),
+        )
+
+        self.encoder_dense = nn.Sequential(
+            *layer(hidden2 * 2, hidden3, 0.1)
+        )
+
+        self.decoder_dense = nn.Sequential(
+            *layer(hidden3, hidden2 * 2, 0.1)
+        )
+        """
 
         self.encoder_width = width
         self.decoder_width = hidden2
@@ -86,7 +132,29 @@ class Autoencoder(nn.Sequential):
                          if in AUTOENCODER or ENCODER mode, and get_decoder_input_width() if in DECODER mode.
         """
         if self.mode == self.Mode.AUTOENCODER:
-            return self.decoder(self.encoder(x))
+
+            """
+            encoded_absolute = self.encoder_absolute(x[:, 0])
+            encoded_angle = self.encoder_angle(x[:, 1])
+
+            
+            dense = torch.cat((encoded_absolute, encoded_angle), dim=1)
+            encoded_dense = self.encoder_dense(dense)
+            decoded_dense = self.decoder_dense(encoded_dense)
+
+            size = decoded_dense.size()[1]
+            absolute = decoded_dense[:, 0:size // 2]
+            angle = decoded_dense[:, size // 2:size]
+            
+            decoded_absolute = self.decoder_absolute(encoded_absolute)
+            decoded_angle = self.decoder_angle(encoded_angle)
+
+            out = torch.stack((decoded_absolute, decoded_angle), dim=1)
+            """
+            out = self.decoder(self.encoder(x))
+
+            return out
+
         elif self.mode == self.Mode.ENCODER:
             return self.encoder(x)
         elif self.mode == self.Mode.DECODER:
