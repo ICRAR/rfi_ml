@@ -79,9 +79,9 @@ def get_attr(hdf5_object, attribute):
 def set_attr(hdf5_object, attribute, value):
     try:
         value = attribute.type(value)
-        hdf5_object.attrs[attribute.name] = value
-    except Exception:
+    except Exception as e:
         raise AttributeError('{0} must be convertable to {1}'.format(attribute.name, attribute.type))
+    hdf5_object.attrs[attribute.name] = value
 
 
 class HDF5Channel(object):
@@ -93,10 +93,10 @@ class HDF5Channel(object):
         self._dataset = dataset
 
     def write_data(self, offset, data):
-        pass  # TODO: Write numpy array 'data' into the appropriate offset
+        self._dataset[offset:offset + data.shape[0]] = data
 
     def read_data(self, offset, length):
-        pass  # TODO: Read numpy array from offset and length
+        return self._dataset[offset:offset + length]
 
     @property
     def name(self):
@@ -170,21 +170,24 @@ class HDF5Observation(object):
         self.filename = filename
 
     def __enter__(self):
-        self._hdf5 = h5py.File(self.filename)
+        self._hdf5 = h5py.File(self.filename, mode='w')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._hdf5.close()
         return self
 
-    def create_channel(self, name, shape, dtype=None):
-        dataset = self._hdf5.create_dataset(name, shape=shape, dtype=dtype)
-        return HDF5Channel(name, dataset)
+    def __contains__(self, item):
+        return item in self._hdf5
 
-    def get_channel(self, name):
-        dataset = self._hdf5.get(name)
+    def __getitem__(self, item):
+        dataset = self._hdf5.get(item)
         if dataset is None:
             return None
+        return HDF5Channel(item, dataset)
+
+    def create_channel(self, name, shape, dtype=None):
+        dataset = self._hdf5.create_dataset(name, shape=shape, dtype=dtype)
         return HDF5Channel(name, dataset)
 
     @property
