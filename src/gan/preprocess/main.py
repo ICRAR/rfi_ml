@@ -71,6 +71,14 @@ def parse_args():
     parser.add_argument('--lba_obs_file',
                         type=str,
                         help='Observation file to use for LBA files')
+    parser.add_argument('--lba_sample_rate',
+                        type=int,
+                        help='Sample rate for LBA files. Required to parse LBA files properly')
+    parser.add_argument('--lba_antenna_name',
+                        type=str,
+                        help="The name of the antenna def for this LBA file in the vex file. e.g. At, Mp, Pa. "
+                             "Corresponds to an entry in the vex.antennas list. Used to pick the appropriate metadata "
+                             "from the vex file for this LBA file")
     return vars(parser.parse_args())
 
 

@@ -57,15 +57,15 @@ Attribute = namedtuple('Attribute', 'name type')
 # HDF5 root attributes
 OBSERVATION_NAME = Attribute('observation_name', str)
 ANTENNA_NAME = Attribute('antenna_name', str)
-START_TIME = Attribute('start_time', int)
-LENGTH = Attribute('length', int)
-SAMPLE_RATE = Attribute('sample_rate', int)
+START_TIME = Attribute('start_time_posix', int)
+LENGTH_SECONDS = Attribute('length_seconds', float)
+SAMPLE_RATE = Attribute('sample_rate_hz', int)
 FILE_NAME = Attribute('file_name', str)
 FILE_TYPE = Attribute('file_type', str)
 
 # HDF5 dataset attributes
-FREQ_START = Attribute('freq_start', float)
-FREQ_END = Attribute('freq_end', float)
+FREQ_START = Attribute('freq_start_mhz', float)
+FREQ_END = Attribute('freq_end_mhz', float)
 
 # Shared attributes (used in both root and dataset)
 ADDITIONAL_METADATA = Attribute('additional_metadata', str)
@@ -163,9 +163,6 @@ class HDF5Observation(object):
     Manages a common interface for reading and writing to HDF5 files to meet the spec.
     """
 
-    EVENT_SOURCE_ON = 0
-    EVENT_SOURCE_OFF = 1
-
     def __init__(self, filename):
         self.filename = filename
 
@@ -186,9 +183,12 @@ class HDF5Observation(object):
             return None
         return HDF5Channel(item, dataset)
 
-    def create_channel(self, name, shape, dtype=None):
-        dataset = self._hdf5.create_dataset(name, shape=shape, dtype=dtype)
+    def create_channel(self, name, shape=None, dtype=None, data=None, **kwargs):
+        dataset = self.create_dataset(name, shape, dtype, data, **kwargs)
         return HDF5Channel(name, dataset)
+
+    def create_dataset(self, name, shape=None, dtype=None, data=None, **kwargs):
+        return self._hdf5.create_dataset(name, shape, dtype, data, **kwargs)
 
     @property
     def observation_name(self):
@@ -242,21 +242,21 @@ class HDF5Observation(object):
         set_attr(self._hdf5, START_TIME, time)
 
     @property
-    def length(self):
+    def length_seconds(self):
         """
-        Get the duration of the observation in milliseconds
+        Get the duration of the observation in seconds
         :return:
         """
-        return get_attr(self._hdf5, LENGTH)
+        return get_attr(self._hdf5, LENGTH_SECONDS)
 
-    @length.setter
-    def length(self, length):
+    @length_seconds.setter
+    def length_seconds(self, length):
         """
-        Set the duration of the observation in milliseconds
+        Set the duration of the observation in seconds
         :param length:
         :return:
         """
-        set_attr(self._hdf5, LENGTH, length)
+        set_attr(self._hdf5, LENGTH_SECONDS, length)
 
     @property
     def sample_rate(self):

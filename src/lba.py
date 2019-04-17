@@ -28,11 +28,10 @@ Utilities for loading LBA files
 import mmap
 import os
 import struct
+import re
+import datetime
 
 import numpy as np
-
-
-SAMPLE_RATE = 32000000
 
 
 class LBAFile(object):
@@ -44,6 +43,9 @@ class LBAFile(object):
         lba = LBAfile(f)
         data = lba.read()
     """
+
+    date_regex = re.compile(r"(?P<year>[0-9]{4})(?P<month>[0-9]{2})(?P<day>[0-9]{2}):"
+                            r"(?P<hour>[0-9]{2})(?P<minute>[0-9]{2})(?P<second>[0-9]{2})")
 
     # For the Numpy array holding the data
     # Freq
@@ -82,13 +84,15 @@ class LBAFile(object):
     ]
     byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
-    def __init__(self, f):
+    def __init__(self, f, sample_rate):
         """
         :param f: opened file
+        :param sample_rate: The sample rate in HZ of the LBA file.
         """
         self.mm = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
         self.header = self._read_header()
         self.size = os.fstat(f.fileno()).st_size
+        self.sample_rate = sample_rate
         self.read_chunk_size = 4096
 
     @property
@@ -107,10 +111,34 @@ class LBAFile(object):
     def max_samples(self):
         data_size = self.size - int(self.header["HEADERSIZE"])
         max_samples = data_size // self.bytes_per_sample
+        # Removing this because it makes parsing harder
+        """
         # Skip over this number of samples, because every 32 million samples there is
         # a 65535 marker which is meaningless
-        max_samples -= max_samples // 32000000
+        # max_samples -= max_samples // self.sample_rate
+        """
         return max_samples
+
+    @property
+    def obs_start(self):
+        # Parse the header TIME header element into a proper time
+        matches = self.date_regex.match(self.header["TIME"])
+        if matches is None:
+            return None
+        else:
+            return datetime.datetime(
+                int(matches.group("year")),
+                int(matches.group("month")),
+                int(matches.group("day")),
+                int(matches.group("hour")),
+                int(matches.group("minute")),
+                int(matches.group("second"))
+            )
+
+    def obs_length(self, samples=None):
+        if samples is None:
+            samples = self.max_samples
+        return samples / self.sample_rate
 
     @classmethod
     def _get_frequency_polarisation(cls, channel):
@@ -236,7 +264,9 @@ class LBAFile(object):
             samples_chunk = struct.unpack(struct_unpack_fmt, data_chunk)
 
             for intdata in samples_chunk:
-                if (samples_read + offset) % SAMPLE_RATE == 0:
+                # I'm removing this part as it makes parsing things a lot harder, and one single sample of
+                # all 1s every second is going to have negligible impact.
+                """if (samples_read + offset) % self.sample_rate == 0:
                     # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
                     if intdata != 65535:
                         print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(
@@ -244,16 +274,16 @@ class LBAFile(object):
                         ))
                     else:
                         print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
-                else:
-                    for channel in range(num_chan):
-                        frequency, polarisation = self.channel_frequency_polarisation_map[channel]
-                        # Pull out the low two bits for P0
-                        nparray[samples_output][frequency][polarisation] = \
-                            val_map[intdata >> (channel * 2) & sample_mask]
-                    samples_output += 1
+                else:"""
+                for channel in range(num_chan):
+                    frequency, polarisation = self.channel_frequency_polarisation_map[channel]
+                    # Pull out the low two bits for P0
+                    nparray[samples_output][frequency][polarisation] = \
+                        val_map[intdata >> (channel * 2) & sample_mask]
+                samples_output += 1
 
-                    if samples_output == samples:
-                        break  # Got everything we need
+                if samples_output == samples:
+                    break  # Got everything we need
                 samples_read += 1
 
             if samples_output == samples:
