@@ -143,10 +143,11 @@ class PreprocessReaderLBA(PreprocessReader):
                         setup = mode.setups[antenna.name]
                         channel_map = [[channel, mode.subbands[channel.subband_id], setup.ifs["IF_{0}".format(channel.if_name)]] for channel in setup.channels]
                         channel_map.sort(key=lambda c: c[0].record_chan)
+                        # TODO: Working on using channel map to derive channel info for names / metadata output into
+                        # TODO: the HDF5 file.
 
             except Exception as e:
                 LOG.error("Failed to parse vex file {0}".format(e))
-
 
         samples_read = 0
         while samples_read < max_samples:
