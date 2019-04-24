@@ -57,14 +57,17 @@ class JobQueue(object):
 
     def __init__(self, num_processes=8):
         self.queue = JoinableQueue()
-        self.consumers = [Consumer(self.queue) for x in range(num_processes)]
+        self.consumers = [Consumer(self.queue) for _ in range(num_processes)]
         for consumer in self.consumers:
             consumer.start()
 
     def join(self):
-        for consumer in self.consumers:
+        for _ in self.consumers:
             self.queue.put(None)
         self.queue.join()
 
     def submit(self, job):
         self.queue.put(job)
+
+    def submit_no_wait(self, job):
+        self.queue.put_nowait(job)

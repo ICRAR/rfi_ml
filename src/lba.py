@@ -30,8 +30,11 @@ import os
 import struct
 import re
 import datetime
+import logging
 
 import numpy as np
+
+LOG = logging.getLogger(__name__)
 
 
 class LBAFile(object):
@@ -72,16 +75,7 @@ class LBAFile(object):
     # | Channel 7	    | DAS #2 IFP#2-LO 6642 - 6658 MHz USB LCP |
     # | Channel 8	    | DAS #2 IFP#2-HI 6658 - 6674 MHz USB LCP |
     # enddef;
-    channel_frequency_polarisation_map = [
-        (0, 0),    # Chan 0
-        (1, 0),    # Chan 1
-        (0, 1),    # Chan 2
-        (1, 1),    # Chan 3
-        (2, 0),    # Chan 4
-        (3, 0),    # Chan 5
-        (2, 1),    # Chan 6
-        (3, 1),    # Chan 7
-    ]
+
     byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
     def __init__(self, f, sample_rate):
@@ -96,8 +90,12 @@ class LBAFile(object):
         self.read_chunk_size = 4096
 
     @property
+    def num_channels(self):
+        return int(self.header["NCHAN"])
+
+    @property
     def bytes_per_sample(self):
-        num_chan = int(self.header["NCHAN"])
+        num_chan = self.num_channels
         num_bits = int(self.header["NUMBITS"])
         bandwidth = int(float(self.header["BANDWIDTH"]))
 
@@ -111,12 +109,6 @@ class LBAFile(object):
     def max_samples(self):
         data_size = self.size - int(self.header["HEADERSIZE"])
         max_samples = data_size // self.bytes_per_sample
-        # Removing this because it makes parsing harder
-        """
-        # Skip over this number of samples, because every 32 million samples there is
-        # a 65535 marker which is meaningless
-        # max_samples -= max_samples // self.sample_rate
-        """
         return max_samples
 
     @property
@@ -139,10 +131,6 @@ class LBAFile(object):
         if samples is None:
             samples = self.max_samples
         return samples / self.sample_rate
-
-    @classmethod
-    def _get_frequency_polarisation(cls, channel):
-        return cls.channel_frequency_polarisation_map[channel]
 
     def _read_header(self):
         """
@@ -185,12 +173,12 @@ class LBAFile(object):
         an offset to start at.
         :param offset: Sample index to start at (0 indexed)
         :param samples: Number of samples to read from that index.
-        :return: ndarray with X = samples, Y = frequencies(4), Z = polarisations(2)
+        :return: ndarray with X = samples, Y = channels
         """
         if samples < 0:
             raise Exception("Negative samples requested")
 
-        num_chan = int(self.header["NCHAN"])
+        num_chan = self.num_channels
         num_bits = int(self.header["NUMBITS"])
         data_start = int(self.header["HEADERSIZE"])
 
@@ -206,11 +194,6 @@ class LBAFile(object):
         # disk-based VLBI data systems, though bit-ordering may be different in some cases
         #
         val_map = [3, 1, -1, -3]  # 2 bit encoding map
-
-        # 2 polarisations per frequency, so there are half as many frequencies as channels
-        # and twice as many bits per frequency.
-        num_freq = num_chan // 2
-        # num_freq_bits = num_bits * 2
 
         # Calculate number of bytes per sample
         bytes_per_sample = self.bytes_per_sample
@@ -240,13 +223,13 @@ class LBAFile(object):
         # Seek to the desired offset
         self.mm.seek(data_start + sample_offset, os.SEEK_SET)
 
-        # X = samples, Y = frequency, Z = polarisation
-        nparray = np.zeros((samples, num_freq, 2), dtype=np.int8)
+        # X = samples, Y = channels.
+        nparray = np.zeros((samples, num_chan), dtype=np.int8)
 
         samples_output = 0  # Number of samples we dumped into nparray
         samples_read = 0  # Number of samples read, including skipped samples every 32M samples
 
-        # Determine the data type of each sample (2 = uint16, 4 = uint32, 8 = uint64)
+        # Determine the data type of each sample (1 = uint8, 2 = uint16, 4 = uint32, 8 = uint64)
         struct_unpack_type = self.byte_unpack_map[bytes_per_sample]
         # Cache the structure unpack format for each read.
         # This is a string containing the format repeated for each sample read
@@ -264,22 +247,24 @@ class LBAFile(object):
             samples_chunk = struct.unpack(struct_unpack_fmt, data_chunk)
 
             for intdata in samples_chunk:
-                # I'm removing this part as it makes parsing things a lot harder, and one single sample of
-                # all 1s every second is going to have negligible impact.
-                """if (samples_read + offset) % self.sample_rate == 0:
+                # This now just checks if this is the case but doesn't skip it
+                if (samples_read + offset) % self.sample_rate == 0:
                     # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
                     if intdata != 65535:
-                        print("Skip value should have been 65535 @ sample {0}, data may be corrupted.".format(
+                        LOG.info("Skip value should have been 65535 at sample {0}. Data may be corrupted.".format(
                             offset + samples_read
                         ))
                     else:
-                        print("Skip {0} marker @ sample {1}".format(intdata, offset + samples_read))
-                else:"""
+                        LOG.info("Skip {0} marker at sample {1}. Data validity check passed".format(
+                            intdata, offset + samples_read
+                        ))
+
                 for channel in range(num_chan):
-                    frequency, polarisation = self.channel_frequency_polarisation_map[channel]
-                    # Pull out the low two bits for P0
-                    nparray[samples_output][frequency][polarisation] = \
-                        val_map[intdata >> (channel * 2) & sample_mask]
+                    # Changed to simply return the channels as a flat array from 0 - num_chan.
+                    # The actual info associated with the channels is derived from the vex file
+                    # or the channels are simply passed through as 0 - num_chan.
+                    # This work is done in the preprocess_lba.py script
+                    nparray[samples_output][channel] = val_map[intdata >> (channel * 2) & sample_mask]
                 samples_output += 1
 
                 if samples_output == samples:

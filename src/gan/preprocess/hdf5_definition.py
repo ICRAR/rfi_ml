@@ -50,9 +50,7 @@ Channels
 """
 
 import h5py
-from collections import namedtuple
-
-Attribute = namedtuple('Attribute', 'name type')
+from hdf5_utils import Attribute, get_attr, set_attr
 
 # HDF5 root attributes
 OBSERVATION_NAME = Attribute('observation_name', str)
@@ -62,6 +60,7 @@ LENGTH_SECONDS = Attribute('length_seconds', float)
 SAMPLE_RATE = Attribute('sample_rate_hz', int)
 FILE_NAME = Attribute('file_name', str)
 FILE_TYPE = Attribute('file_type', str)
+NUM_CHANNELS = Attribute('num_channels', str)
 
 # HDF5 dataset attributes
 FREQ_START = Attribute('freq_start_mhz', float)
@@ -69,19 +68,6 @@ FREQ_END = Attribute('freq_end_mhz', float)
 
 # Shared attributes (used in both root and dataset)
 ADDITIONAL_METADATA = Attribute('additional_metadata', str)
-
-
-def get_attr(hdf5_object, attribute):
-    value = hdf5_object.attrs.get(attribute.name, None)
-    return attribute.type(value)
-
-
-def set_attr(hdf5_object, attribute, value):
-    try:
-        value = attribute.type(value)
-    except Exception as e:
-        raise AttributeError('{0} must be convertable to {1}'.format(attribute.name, attribute.type))
-    hdf5_object.attrs[attribute.name] = value
 
 
 class HDF5Channel(object):
@@ -309,6 +295,23 @@ class HDF5Observation(object):
         :return:
         """
         set_attr(self._hdf5, FILE_TYPE, t)
+
+    @property
+    def num_channels(self):
+        """
+        Get the number of channels in the HDF5 file
+        :return:
+        """
+        return get_attr(self._hdf5, NUM_CHANNELS)
+
+    @num_channels.setter
+    def num_channels(self, t):
+        """
+        Set the number of channels in the HDF5 file
+        :param t:
+        :return:
+        """
+        set_attr(self._hdf5, NUM_CHANNELS, t)
 
     @property
     def additional_metadata(self):

@@ -63,17 +63,19 @@ class PreprocessReaderLBA(PreprocessReader):
         end_mjd = time.Time(end).mjd
         total_delta = end_mjd - start_mjd
         # Ensure scans are sorted per start time
+        # Get the scans for this specific antenna
 
-        # TESTING
-        scans = [
-            Scan(start_mjd - total_delta, start_mjd + total_delta * 0.25),
-            Scan(start_mjd + total_delta * 0.5, start_mjd + total_delta * 0.75),
-            Scan(start_mjd + total_delta * 0.9, end_mjd)
-        ]
+        antenna_name = next(a.name for a in vex.antennas if a.def_name == self.antenna_name)
 
+        scans = filter(lambda s: antenna_name in s.stations, vex.scans)
+        scans = map(lambda s: s.stations[antenna_name], scans)
+        scans = sorted(scans, key=lambda s: s.start)
         sources = []
 
-        for scan in sorted(scans, key=lambda s: s.start):
+        # TODO: This needs to use the correct scans for the specific station that we're reading
+        #       data for. The start and end times will vary for the station..
+
+        for scan in scans:
             if start_mjd >= end_mjd:
                 break  # Can't fit any more scans in
 
@@ -113,10 +115,11 @@ class PreprocessReaderLBA(PreprocessReader):
         observation.original_file_name = name
         observation.original_file_type = 'lba'
         observation.additional_metadata = json.dumps(lba.header)
-        observation.antenna_name = lba.header.get('ANTENNANAME', '')
+        observation.antenna_name = self.antenna_name if self.antenna_name is not None else lba.header.get('ANTENNANAME', '')
         observation.sample_rate = self.sample_rate
         observation.length_seconds = obs_length
         observation.start_time = start.timestamp()
+        observation.num_channels = lba.num_channels
 
         channel_map = None
         if self.obs_filename is not None:
@@ -142,9 +145,14 @@ class PreprocessReaderLBA(PreprocessReader):
                         mode = vex.modes[0]
                         setup = mode.setups[antenna.name]
                         channel_map = [[channel, mode.subbands[channel.subband_id], setup.ifs["IF_{0}".format(channel.if_name)]] for channel in setup.channels]
+                        # TODO: I'm unsure if this is correct or what order we should use here
+                        #       - Ordering by subband_id will match the CH0(0-8) ordering present in the vex file.
+                        #       - Ordering by record_chan seems to make some logic sense as it orders them from low to
+                        #       high frequency across pol R then pol L. It also orders the BBC values ascending.
+                        #       - Neither of these seem to match the observation_details.md table.
+
+                        # TODO: For now, I'll assume sorting by record chan
                         channel_map.sort(key=lambda c: c[0].record_chan)
-                        # TODO: Working on using channel map to derive channel info for names / metadata output into
-                        # TODO: the HDF5 file.
 
             except Exception as e:
                 LOG.error("Failed to parse vex file {0}".format(e))
@@ -155,20 +163,37 @@ class PreprocessReaderLBA(PreprocessReader):
             samples_to_read = min(remaining_samples, self.chunk_size)
             samples = lba.read(samples_read, samples_to_read)
 
-            for polarisation in range(samples.shape[2]):
-                for channel in range(samples.shape[1]):
-                    channel_name = 'p{0}_c{1}'.format(polarisation, channel)
+            for channel_index in range(samples.shape[1]):
+                # Loop over each channel, then either output the channel directly
+                # into the HDF5 file, or get the channel info to get the appropriate metadata
+                # for the channel, then output that.
 
-                    out_channel = observation[channel_name]
-                    if out_channel is None:
-                        # storing -3, -1, 1, 3 so we can use a single byte for each
-                        out_channel = observation.create_channel(channel_name, shape=(max_samples,), dtype=np.int8)
-                        # out_channel.freq_start
-                        # out_channel.freq_end
+                channel_name = "channel_{0}".format(channel_index)
 
-                    data = samples[:, channel, polarisation]
-                    out_channel.write_data(samples_read, data)
+                out_channel = observation[channel_name]
+                if out_channel is None:
+                    out_channel = observation.create_channel(channel_name, shape=(max_samples,), dtype=np.int8)
+                    if channel_map is not None:
+                        vex_channel, vex_subband, vex_if = channel_map[channel_index]
+                        # Add info from the vex file to the channel
+                        out_channel.freq_start = vex_channel.bbc_freq
+                        out_channel.freq_end = vex_channel.bbc_freq + vex_channel.bbc_bandwidth
+                        out_channel.additional_metadata = json.dumps({
+                            'channel_name': vex_channel.name,
+                            'polarisation': vex_subband.pol.decode('utf-8'),
+                            'bbc_name': vex_channel.bbc_name,
+                            'record_chan': vex_channel.record_chan,
+                            'subband_id': vex_channel.subband_id,
+                            'vlba_band_name': vex_if.vlba_band_name,
+                            'if_sslo': vex_if.if_sslo,
+                            'lower_edge_freq': vex_if.lower_edge_freq
+                        }, indent=4)
+                data = samples[:, channel_index]
+                out_channel.write_data(samples_read, data)
 
             samples_read += samples_to_read
+
+            if (samples_read // self.chunk_size) % 10 == 0:
+                LOG.info("{0:.2%} {1}/{2}".format(samples_read / max_samples, samples_read, max_samples))
 
         LOG.info("LBA preprocessor complete")
