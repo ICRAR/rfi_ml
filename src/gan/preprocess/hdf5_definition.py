@@ -60,7 +60,7 @@ LENGTH_SECONDS = Attribute('length_seconds', float)
 SAMPLE_RATE = Attribute('sample_rate_hz', int)
 FILE_NAME = Attribute('file_name', str)
 FILE_TYPE = Attribute('file_type', str)
-NUM_CHANNELS = Attribute('num_channels', str)
+NUM_CHANNELS = Attribute('num_channels', int)
 
 # HDF5 dataset attributes
 FREQ_START = Attribute('freq_start_mhz', float)
@@ -91,6 +91,14 @@ class HDF5Channel(object):
         :return:
         """
         return self._name
+
+    @property
+    def length(self):
+        """
+        Get the length of the dataset
+        :return:
+        """
+        return self._dataset.shape[0]
 
     @property
     def freq_start(self):
@@ -153,7 +161,7 @@ class HDF5Observation(object):
         self.filename = filename
 
     def __enter__(self):
-        self._hdf5 = h5py.File(self.filename, mode='w')
+        self._hdf5 = h5py.File(self.filename, mode='a')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
