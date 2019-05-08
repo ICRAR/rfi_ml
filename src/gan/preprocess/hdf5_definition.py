@@ -55,7 +55,7 @@ from hdf5_utils import Attribute, get_attr, set_attr
 # HDF5 root attributes
 OBSERVATION_NAME = Attribute('observation_name', str)
 ANTENNA_NAME = Attribute('antenna_name', str)
-START_TIME = Attribute('start_time_posix', int)
+START_TIME = Attribute('start_time_posix', float)
 LENGTH_SECONDS = Attribute('length_seconds', float)
 SAMPLE_RATE = Attribute('sample_rate_hz', int)
 FILE_NAME = Attribute('file_name', str)
@@ -77,6 +77,11 @@ class HDF5Channel(object):
     def __init__(self, name, dataset):
         self._name = name
         self._dataset = dataset
+
+    def write_defaults(self):
+        self.freq_start = 0
+        self.freq_end = 0
+        self.additional_metadata = ""
 
     def write_data(self, offset, data):
         self._dataset[offset:offset + data.shape[0]] = data
@@ -176,6 +181,17 @@ class HDF5Observation(object):
         if dataset is None:
             return None
         return HDF5Channel(item, dataset)
+
+    def write_defaults(self):
+        self.observation_name = ""
+        self.antenna_name = ""
+        self.start_time = 0
+        self.length_seconds = 0
+        self.sample_rate = 0
+        self.original_file_name = ""
+        self.original_file_type = ""
+        self.num_channels = 0
+        self.additional_metadata = ""
 
     def create_channel(self, name, shape=None, dtype=None, data=None, **kwargs):
         dataset = self.create_dataset(name, shape, dtype, data, **kwargs)

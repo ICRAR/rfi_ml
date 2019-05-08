@@ -21,10 +21,15 @@
 #    MA 02111-1307  USA
 #
 
+import os
+import sys
+
+sys.path.append(os.path.abspath('..'))
+
 import argparse
 import logging
-import os
 from preprocess_lba import PreprocessReaderLBA
+from preprocess_india_txt import PreprocessReaderIndiaTXT
 from hdf5_definition import HDF5Observation
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
@@ -35,7 +40,8 @@ class PreprocessorMain(object):
 
     def __init__(self):
         self.preprocess_readers = {
-            '.lba': PreprocessReaderLBA
+            '.lba': PreprocessReaderLBA,
+            '.txt': PreprocessReaderIndiaTXT
         }
 
     def _get_preprocessor(self, filename, **kwargs):
@@ -68,17 +74,21 @@ def parse_args():
                         type=int,
                         default=4096,
                         help='Number of samples to read from the input file at once')
+
+    parser.add_argument('--sample_rate',
+                        type=int,
+                        help='Sample rate in Hz, needed for the LBA and India TXT parsers')
+
+    # LBA arguments
     parser.add_argument('--lba_obs_file',
                         type=str,
                         help='Observation file to use for LBA files')
-    parser.add_argument('--lba_sample_rate',
-                        type=int,
-                        help='Sample rate for LBA files. Required to parse LBA files properly')
     parser.add_argument('--lba_antenna_name',
                         type=str,
                         help="The name of the antenna def for this LBA file in the vex file. e.g. At, Mp, Pa. "
                              "Corresponds to an entry in the vex.antennas list. Used to pick the appropriate metadata "
                              "from the vex file for this LBA file")
+
     return vars(parser.parse_args())
 
 

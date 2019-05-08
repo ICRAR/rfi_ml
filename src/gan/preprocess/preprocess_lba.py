@@ -47,7 +47,7 @@ class PreprocessReaderLBA(PreprocessReader):
     def __init__(self, **kwargs):
         self.max_samples = get_value(kwargs, 'max_samples', types=[int], range_min=0, default_value=0)
         self.obs_filename = get_value(kwargs, 'lba_obs_file', types=[str, None], default_value=None)
-        self.sample_rate = get_value(kwargs, 'lba_sample_rate', types=[int, None], default_value=None)
+        self.sample_rate = get_value(kwargs, 'sample_rate', types=[int, None], default_value=None)
         if self.sample_rate is None:
             LOG.warning("No sample rate provided, defaulting to {0}".format(self.default_sample_rate))
             self.sample_rate = self.default_sample_rate

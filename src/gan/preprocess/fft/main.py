@@ -32,102 +32,18 @@ Preprocessing pipeline step 2: Perform an FFT over the preprocessed data and sav
   and writes them out to the HDF5 file.
 """
 import math
-import h5py
 import argparse
 import logging
 import numpy as np
 from hdf5_definition import HDF5Observation
-from hdf5_utils import Attribute, get_attr, set_attr
+from fft.hdf5_fft_definition import HDF5FFTDataSet
+
 from jobs import JobQueue
 from multiprocessing import Queue
 from queue import Empty, Full
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
-
-MIN_ANGLE = Attribute('min_angle', float)
-MAX_ANGLE = Attribute('max_angle', float)
-MIN_ABS = Attribute('min_abs', float)
-MAX_ABS = Attribute('max_abs', float)
-
-
-class HDF5FFTChannel(object):
-    def __init__(self, name, dataset):
-        self._name = name
-        self._dataset = dataset
-
-    def write_data(self, offset, data):
-        """
-        Write FFT data to the channel
-        :param offset: Offset in the channel to put the data
-        :param data: 2D numpy array of FFT values. x = fft index, y = fft values
-                     e.g. (2, 128) would be 2 ffts of 128 length
-        """
-        self._dataset[offset:offset + data.shape[0]] = data
-
-    def read_data(self, offset, count):
-        """
-        Read one or more FFTs from the channel
-        :param offset: Offset to start reading
-        :param count: Number of FFTs to read
-        :return: Numpy array containing as many ffts as are available up to the desired count
-        """
-        return self._dataset[offset:offset + count]
-
-    @property
-    def min_angle(self):
-        return get_attr(self._dataset, MIN_ANGLE)
-
-    @min_angle.setter
-    def min_angle(self, value):
-        set_attr(self._dataset, MIN_ANGLE, value)
-
-    @property
-    def max_angle(self):
-        return get_attr(self._dataset, MAX_ANGLE)
-
-    @max_angle.setter
-    def max_angle(self, value):
-        set_attr(self._dataset, MAX_ANGLE, value)
-
-    @property
-    def min_abs(self):
-        return get_attr(self._dataset, MIN_ABS)
-
-    @min_abs.setter
-    def min_abs(self, value):
-        set_attr(self._dataset, MIN_ABS, value)
-
-    @property
-    def max_abs(self):
-        return get_attr(self._dataset, MAX_ABS)
-
-    @max_abs.setter
-    def max_abs(self, value):
-        set_attr(self._dataset, MAX_ABS, value)
-
-
-class HDF5FFTDataSet(object):
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __enter__(self):
-        self._hdf5 = h5py.File(self.filename, mode='w')
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._hdf5.close()
-        return self
-
-    def create_channel(self, name, shape=None, dtype=None, data=None, **kwargs):
-        dataset = self.create_dataset(name, shape, dtype, data, **kwargs)
-        return HDF5FFTChannel(name, dataset)
-
-    def create_dataset(self, name, shape=None, dtype=None, data=None, **kwargs):
-        return self._hdf5.create_dataset(name, shape, dtype, data, **kwargs)
-
-
-return_queue = Queue()
 
 
 class FFTJob(object):
@@ -145,7 +61,7 @@ class FFTJob(object):
         result = np.fft.rfft(samples, axis=1)
         abs_result = np.abs(result)
         angle_result = np.angle(result)
-        return_queue.put([
+        FFTPostprocessor.return_queue.put([
             self._index,
             np.stack((abs_result, angle_result), axis=-1),
             np.min(abs_result), np.max(abs_result),
@@ -159,6 +75,7 @@ class FFTPostprocessor(object):
     """
 
     max_queue_checks = 100
+    return_queue = Queue()
 
     def __init__(self, workers):
         self._workers = workers
@@ -210,7 +127,7 @@ class FFTPostprocessor(object):
                 try:
                     index, result, \
                     min_abs, max_abs, \
-                    min_angle, max_angle = return_queue.get_nowait()
+                    min_angle, max_angle = self.return_queue.get_nowait()
 
                     LOG.info("Received: index {0}, ffts {1}".format(index, result.shape[0]))
 
