@@ -33,8 +33,8 @@ import torch.nn.functional as functional
 import torch.utils.data as data
 
 from constants import NUMBER_CHANNELS, NUMBER_OF_CLASSES
-from train import test_epoch, train
-from utilities import RfiData, Timer, build_data
+from old.train import test_epoch, train
+from old.utilities import RfiData, Timer, build_data
 
 LOGGER = logging.getLogger(__name__)
 HIDDEN_LAYERS = 200

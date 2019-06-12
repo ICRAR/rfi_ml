@@ -30,7 +30,7 @@ import torch.utils.data as data
 from torch.autograd import Variable
 
 from constants import NUMBER_OF_CLASSES
-from histogram import Histogram
+from old.histogram import Histogram
 
 LOGGER = logging.getLogger(__name__)
 

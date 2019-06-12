@@ -32,8 +32,7 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from lba import LBAFile
-from scipy import signal, stats, fftpack
-
+from scipy import signal, stats
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)

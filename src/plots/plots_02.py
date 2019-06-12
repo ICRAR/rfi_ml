@@ -26,16 +26,13 @@ Methods to generate a variety of plots from lba files
 """
 
 import gc
-import json
 import logging
 import os
 import argparse
 
 import matplotlib
-import matplotlib.mlab as mlab
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.backends.backend_pdf import PdfPages
 from scipy import signal
 
 from lba import LBAFile
