@@ -107,10 +107,9 @@ class AutoEncoderTest(object):
 
 
 class GANTest(object):
-    def __init__(self, directory, epoch, size_first, gen_out, real_out, discriminator_out, discriminator_real):
+    def __init__(self, directory, epoch, gen_out, real_out, discriminator_out, discriminator_real):
         self.directory = directory
         self.epoch = epoch
-        self.size_first = size_first
         self.gen_out = gen_out
         self.real_out = real_out
         self.discriminator_out = discriminator_out
@@ -123,7 +122,7 @@ class GANTest(object):
                 pdf.plot_output(self.real_out[i], "Real Data {0}".format(i))
                 pdf.plot_output([self.real_out[i], self.gen_out[i]], "Combined {0}".format(i))
 
-            with open(os.path.join(self.directory, 'discriminator.txt'), 'w') as f:
+            with open(os.path.join(self.directory, '{0}_discriminator.txt'), 'w') as f:
                     f.write("Fake Expected (Data that came from the generator): [0]\n")
                     for i in range(self.discriminator_out.shape[0]):
                         f.write("Fake: [{:.2f}]\n".format(self.discriminator_out[i][0]))  #, self.discriminator_out[i][1]))
@@ -178,13 +177,12 @@ class Visualiser(object):
     def step_autoencoder(self, loss):
         self.g_loss.append(loss)
 
-    def test(self, epoch, size_first, discriminator, generator, noise, real):
+    def test(self, epoch, discriminator, generator, noise, real):
         generator.eval()
         discriminator.eval()
         out = generator(noise)
         self.queue.submit(GANTest(directory=self._get_directory(),
                                   epoch=epoch,
-                                  size_first=size_first,
                                   gen_out=out.cpu().data.numpy(),
                                   real_out=real.cpu().data.numpy(),
                                   discriminator_out=discriminator(out).cpu().data.numpy(),

@@ -61,6 +61,7 @@ SAMPLE_RATE = Attribute('sample_rate_hz', int)
 FILE_NAME = Attribute('file_name', str)
 FILE_TYPE = Attribute('file_type', str)
 NUM_CHANNELS = Attribute('num_channels', int)
+NUM_SAMPLES = Attribute('num_samples', int)
 
 # HDF5 dataset attributes
 FREQ_START = Attribute('freq_start_mhz', float)
@@ -162,11 +163,12 @@ class HDF5Observation(object):
     Manages a common interface for reading and writing to HDF5 files to meet the spec.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         self.filename = filename
+        self.kwargs = kwargs
 
     def __enter__(self):
-        self._hdf5 = h5py.File(self.filename, mode='a')
+        self._hdf5 = h5py.File(self.filename, **self.kwargs)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -181,6 +183,9 @@ class HDF5Observation(object):
         if dataset is None:
             return None
         return HDF5Channel(item, dataset)
+
+    def close(self):
+        self._hdf5.close()
 
     def write_defaults(self):
         self.observation_name = ""
@@ -336,6 +341,14 @@ class HDF5Observation(object):
         :return:
         """
         set_attr(self._hdf5, NUM_CHANNELS, t)
+
+    @property
+    def num_samples(self):
+        return get_attr(self._hdf5, NUM_SAMPLES)
+
+    @num_samples.setter
+    def num_samples(self, value):
+        set_attr(self._hdf5, NUM_SAMPLES, value)
 
     @property
     def additional_metadata(self):

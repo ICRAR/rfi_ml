@@ -31,6 +31,12 @@ Preprocessing pipeline step 2: Perform an FFT over the preprocessed data and sav
 - This process accepts items from the destination queue (items here contain an index as to which FFT they are)
   and writes them out to the HDF5 file.
 """
+import os, sys
+
+basename = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(os.path.join(basename, "..")))
+sys.path.append(os.path.abspath(os.path.join(basename, "../..")))
+
 import math
 import argparse
 import logging
@@ -148,22 +154,27 @@ class FFTPostprocessor(object):
 
         job_queue = JobQueue(self._workers)
 
-        with HDF5Observation(infilename) as infile:
-            with HDF5FFTDataSet(outfilename) as outfile:
+        with HDF5Observation(infilename, mode='r') as infile:
+            with HDF5FFTDataSet(outfilename, mode='w') as outfile:
+
+                num_ffts_out = infile.num_samples // self._fft_size
+                if infile.num_samples % self._fft_size != 0:
+                    num_ffts_out += 1
+
+                if self._fft_size % 2 == 0:
+                    # Size of output for rfft is (n/2)+1
+                    fft_size_out = self._fft_size // 2 + 1
+                else:
+                    # Size of output for rfft is (n+1)/2
+                    fft_size_out = (self._fft_size + 1) // 2
+
+                outfile.fft_window = self._fft_size
+                outfile.fft_count = num_ffts_out
+                outfile.fft_input_size = fft_size_out
+
                 for i in range(infile.num_channels):
                     channel_name = 'channel_{0}'.format(i)
                     channel = infile[channel_name]
-
-                    num_ffts_out = channel.length // self._fft_size
-                    if channel.length % self._fft_size != 0:
-                        num_ffts_out += 1
-
-                    if self._fft_size % 2 == 0:
-                        # Size of output for rfft is (n/2)+1
-                        fft_size_out = self._fft_size // 2 + 1
-                    else:
-                        # Size of output for rfft is (n+1)/2
-                        fft_size_out = (self._fft_size + 1) // 2
 
                     out_channel = outfile.create_channel(channel_name,
                                                          shape=(num_ffts_out, fft_size_out, 2),

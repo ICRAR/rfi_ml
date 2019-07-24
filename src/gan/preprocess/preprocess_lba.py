@@ -21,6 +21,7 @@
 #    MA 02111-1307  USA
 #
 
+import os
 import json
 import numpy as np
 import pyvex
@@ -111,21 +112,19 @@ class PreprocessReaderLBA(PreprocessReader):
 
         LOG.info("LBA obs time: start {0} end {1} duration {2} sec".format(start, end, obs_length))
 
-        observation.observation_name = name
-        observation.original_file_name = name
-        observation.original_file_type = 'lba'
+        observation.observation_name = os.path.basename(name)
         observation.additional_metadata = json.dumps(lba.header)
         observation.antenna_name = self.antenna_name if self.antenna_name is not None else lba.header.get('ANTENNANAME', '')
         observation.sample_rate = self.sample_rate
         observation.length_seconds = obs_length
         observation.start_time = start.timestamp()
         observation.num_channels = lba.num_channels
+        observation.num_samples = max_samples
 
         channel_map = None
         if self.obs_filename is not None:
             try:
                 vex = pyvex.Vex(self.obs_filename)
-                # self._fill_on_source_array1(vex, start, end, max_samples)
                 self._fill_source_array(observation, vex, start, end, max_samples)
 
                 # Get channel info from the VEX file.

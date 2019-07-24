@@ -55,7 +55,7 @@ class Data(object):
         }))
         LOG.info('Number of NN inputs available with this configuration {0}'.format(len(self.hdf5_dataset)))
 
-        width = self.get_input_shape()[1]
+        width = self.get_input_shape()[0]
 
         self.data = DataLoader(self.hdf5_dataset,
                                batch_size=batch_size,

@@ -21,24 +21,22 @@
 #    MA 02111-1307  USA
 #
 
-import h5py
 import logging
+import math
+import numpy as np
 from torch.utils.data import Dataset
+from preprocess.fft.hdf5_fft_definition import HDF5FFTDataSet
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 
+# TODO: Allow specification of specific channels to use
 class HDF5Dataset(Dataset):
     """
     Creates a dataset to loop over all of the NN inputs contained within an HDF5 file
-    that was exported from an LBA file using 'preprocess.py'
+    that was exported from an LBA file using the FFT preprocessor.
     """
-
-    @staticmethod
-    def get_index(index, length, possibilities):
-        part_size = length // len(possibilities)
-        return possibilities[index // part_size], index % part_size
 
     def __init__(self, filename, **kwargs):
         """
@@ -52,59 +50,31 @@ class HDF5Dataset(Dataset):
         """
         super(HDF5Dataset, self).__init__()
 
-        self.hdf5 = h5py.File(filename, 'r', swmr=True, libver='latest', rdcc_nbytes=1000000000)  # 1 GB
+        self.hdf5 = HDF5FFTDataSet(filename, mode='r', swmr=True, libver='latest', rdcc_nbytes=1000000000)  # 1 GB
         self.cache = {}
 
-        def get_attribute(name):
-            value = self.hdf5.attrs.get(name, None)
-            if value is None:
-                raise RuntimeError('Invalid HDF5 file. {0} was not set in attributes'.format(name))
-            return value
-
-        def get_ints_argument(name, default):
-            value = kwargs.get(name, None)
-            if value is None:
-                return default
-            else:
-                t = type(value)
-                if t != list and t != int:
-                    raise RuntimeError('{0} must be a list of integers, or an integer'.format(name))
-                if t == list and not all(type(p) == int for p in value):
-                    raise RuntimeError('{0} list must contain only integers'.format(name))
-            return [value] if type(value) is int else value
-
-        def get_int_argument(name):
-            value = kwargs.get(name, None)
-            if value is not None and type(value) != int:
-                raise RuntimeError('{0} should be an integer'.format(name))
-            return value
-
         # Number of FFTs contained within the file
-        self.fft_count = get_attribute('fft_count')
+        self.fft_count = self.hdf5.fft_count
 
         # Width of the FFTs contained within the file
-        self.fft_window = get_attribute('fft_window')
-
-        # Total number of samples that were FFT'd
-        self.samples = get_attribute('samples')
+        self.fft_window = self.hdf5.fft_window
 
         # Size of each NN input
-        self.input_size = get_attribute('input_size')
+        self.input_size = self.hdf5.fft_input_size
 
-        # Cutoff used. How many items at the start and end of the FFT were dropped.
-        self.cutoff = get_attribute('cutoff')
+        # User wants to return the abs and angle values for each FFT concatenated horzontally to form one
+        # big input tensor of size self.input_size * 2
+        self.horizontal_concatenate = kwargs.get('horizontal_concatenate', False)
+        if self.horizontal_concatenate:
+            self.input_size *= 2  # double input size as we're returning abs and angle concat together
 
-        # User specified they only want these polarisations
-        self.polarisations = get_ints_argument('polarisations', [0, 1])
-
-        # User specified they only want these frequencies
-        self.frequencies = get_ints_argument('frequencies', [0, 1, 2, 3])
+        self.num_channels = self.hdf5.num_channels
 
         # User wants to cache data from the HDF5 file instead of re-reading it
         self.use_cache = kwargs.get('use_cache', False)
 
         # User specified they only want to use this many NN inputs from the entire dataset
-        self.max_inputs = get_int_argument('max_inputs')
+        self.max_inputs = kwargs.get('max_inputs', None)
         if self.max_inputs is None:
             self.max_inputs = self.fft_count
         else:
@@ -123,13 +93,13 @@ class HDF5Dataset(Dataset):
         """
         :return: Number of inputs in the dataset
         """
-        return self.max_inputs * len(self.polarisations) * len(self.frequencies)
+        return self.max_inputs * self.num_channels
 
     def __getitem__(self, i):
         """
         Gets an NN input from the dataset. This will iterate over all of the selected
         polarisations and frequencies.
-        :param index: The index to get.
+        :param i: The index to get.
         :return: A single NN input
         """
         if self.use_cache:
@@ -137,30 +107,35 @@ class HDF5Dataset(Dataset):
             if cached is not None:
                 return cached
 
-        length = len(self)
-        p, index = self.get_index(i, length, self.polarisations)
-        c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
-        key = 'p{0}_c{1}'.format(p, c)
-        data_container = self.hdf5[key]
+        # Out of the entire dataset, work out the channel that this index corresponds to.
+        channel_index = math.floor(i / self.max_inputs)
+        data_index = i % self.max_inputs
+        channel = self.hdf5.get_channel(channel_index)
 
-        data = data_container[index]
+        # This returns an array with an X dimension of 1, as we're only asking for 1 input
+        data = channel.read_data(data_index, 1)[0]
+
+        # [:, 0] is abs, [:, 1] is angles
 
         if self.normalise:
-            # Normalise to 0 to 1 ?
-            minimum = data_container.attrs['min_abs']
-            maximum = data_container.attrs['max_abs']
-            data[0] -= minimum
-            data[0] /= maximum - minimum
-            data[0] *= 2
-            data[0] -= 1
+            # Normalise to -1 to 1
+            minimum = channel.min_abs
+            maximum = channel.max_abs
+            data[:, 0] -= minimum
+            data[:, 0] /= maximum - minimum
+            data[:, 0] *= 2
+            data[:, 0] -= 1
 
             # Normalise to -1 to 1
-            minimum = data_container.attrs['min_angle']
-            maximum = data_container.attrs['max_angle']
-            data[1] -= minimum
-            data[1] /= maximum - minimum
-            data[1] *= 2
-            data[1] -= 1
+            minimum = channel.min_angle
+            maximum = channel.max_angle
+            data[:, 1] -= minimum
+            data[:, 1] /= maximum - minimum
+            data[:, 1] *= 2
+            data[:, 1] -= 1
+
+        if self.horizontal_concatenate:
+            data = np.concatenate(data, axis=0)
 
         if self.use_cache:
             self.cache[i] = data
@@ -177,26 +152,11 @@ class HDF5Dataset(Dataset):
         return {
             'fft_count': self.fft_count,
             'fft_window': self.fft_window,
-            'samples': self.samples,
-            'polarisations': self.polarisations,
-            'frequencies': self.frequencies,
             'max_inputs': self.max_inputs,
             'normalise': self.normalise,
+            'horizontal_concatenate': self.horizontal_concatenate,
             'input_shape': self.get_input_shape(),
-            'cutoff': self.cutoff
         }
-
-    def get_polarisation_and_channel(self, index):
-        """
-        Get the polarisation and channel of the input that would be returned from the
-        specified index.
-        :param index: The index to get the polarisation and channel from
-        :return: The polarisation and channel as a tuple
-        """
-        length = len(self)
-        p, index = self.get_index(index, length, self.polarisations)
-        c, index = self.get_index(index, length // len(self.polarisations), self.frequencies)
-        return p, c
 
     def close(self):
         """
@@ -208,7 +168,10 @@ class HDF5Dataset(Dataset):
         """
         :return: The shape of each input returned by this dataset
         """
-        return 2, int(self.input_size - self.cutoff * 2)
+        if self.horizontal_concatenate:
+            return int(self.input_size),
+        else:
+            return int(self.input_size), 2  # 0 is abs, 1 is angle
 
     def precache(self):
         """

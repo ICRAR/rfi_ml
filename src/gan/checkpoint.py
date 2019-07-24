@@ -76,7 +76,7 @@ class Checkpoint(object):
         else:
             saver()
 
-    def __init__(self, filename, module_state=None, optimiser_state=None, epoch=None):
+    def __init__(self, base_checkpoint_directory, filename, module_state=None, optimiser_state=None, epoch=None):
         """
         Create a checkpoint that saves to / loads from the specified checkpoint directory.
         The state parameters to this constructor are optional, but should all be provided at once.
@@ -85,7 +85,8 @@ class Checkpoint(object):
         :param optimiser_state: (optional) Current optimiser state to save.
         :param epoch: (optional) Current epoch to save.
         """
-        self.directory = os.path.abspath('./{0}{1}'.format(self.CHECKPOINT_PREFIX, filename))
+        f = os.path.join(base_checkpoint_directory, "{0}{1}".format(self.CHECKPOINT_PREFIX, filename))
+        self.directory = os.path.abspath(f)
         self.filename = filename
         self.module_state = module_state
         self.optimiser_state = optimiser_state

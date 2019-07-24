@@ -21,6 +21,7 @@
 #    MA 02111-1307  USA
 #
 
+import os
 import json
 import logging
 import itertools
@@ -93,14 +94,12 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
 
         num_samples = int(header["SegmentSize"])
 
-        observation.write_defaults()
-        observation.observation_name = name
+        observation.observation_name = os.path.basename(name)
         observation.length_seconds = num_samples / self.sample_rate
         observation.sample_rate = self.sample_rate
-        observation.original_file_name = name
-        observation.original_file_type = 'india_txt'
         observation.num_channels = 1
         observation.additional_metadata = json.dumps(header)
+        observation.num_samples = num_samples
 
         channel = observation.create_channel("channel_0", (num_samples,), dtype=np.float32)
         channel.write_defaults()

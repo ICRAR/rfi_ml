@@ -29,6 +29,10 @@ MAX_ANGLE = Attribute('max_angle', float)
 MIN_ABS = Attribute('min_abs', float)
 MAX_ABS = Attribute('max_abs', float)
 
+FFT_WINDOW = Attribute('fft_window', int)
+FFT_COUNT = Attribute('fft_count', int)
+FFT_INPUT_SIZE = Attribute('input_size', int)
+
 
 class HDF5FFTChannel(object):
     def __init__(self, name, dataset):
@@ -87,16 +91,51 @@ class HDF5FFTChannel(object):
 
 
 class HDF5FFTDataSet(object):
-    def __init__(self, filename):
+    def __init__(self, filename, **kwargs):
         self.filename = filename
+        self._hdf5 = h5py.File(self.filename, **kwargs)
 
     def __enter__(self):
-        self._hdf5 = h5py.File(self.filename, mode='w')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._hdf5.close()
         return self
+
+    def close(self):
+        self._hdf5.close()
+
+    @property
+    def fft_window(self):
+        return get_attr(self._hdf5, FFT_WINDOW)
+
+    @fft_window.setter
+    def fft_window(self, value):
+        set_attr(self._hdf5, FFT_WINDOW, value)
+
+    @property
+    def fft_count(self):
+        return get_attr(self._hdf5, FFT_COUNT)
+
+    @fft_count.setter
+    def fft_count(self, value):
+        set_attr(self._hdf5, FFT_COUNT, value)
+
+    @property
+    def fft_input_size(self):
+        return get_attr(self._hdf5, FFT_INPUT_SIZE)
+
+    @fft_input_size.setter
+    def fft_input_size(self, value):
+        set_attr(self._hdf5, FFT_INPUT_SIZE, value)
+
+    @property
+    def num_channels(self):
+        return len(self._hdf5.keys())
+
+    def get_channel(self, index):
+        name = "channel_{0}".format(index)
+        return HDF5FFTChannel(name, self._hdf5[name])
 
     def create_channel(self, name, shape=None, dtype=None, data=None, **kwargs):
         dataset = self.create_dataset(name, shape, dtype, data, **kwargs)

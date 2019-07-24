@@ -42,14 +42,14 @@ class Config(object):
         'MAX_AUTOENCODER_EPOCHS': Default(60, int),  # Max number of epochs to train the autoencoder for
         'MAX_SAMPLES':                      Default(0, int),  # Maximum number of inputs to train on. Set to 0 for unlimited
         'BATCH_SIZE':                       Default(4096, int),  # Number of samples to train on per batch
-        'POLARISATIONS':                    Default([0, 1], list, int),  # Which polarisations should be used?
-        'FREQUENCIES':                      Default([0, 1, 2, 3], list, int),  # Which frequencies should be used?
         'NORMALISE':                        Default(True, bool),  # Set to true to normalise inputs
         'ADD_DROPOUT':                      Default(True, bool),  # if true, add dropout to the inputs before passing them into the network
         'ADD_NOISE':                        Default(False, bool),  # if true, add noise to the inputs before passing them into the network
         'REQUEUE_EPOCHS':                   Default(0, int),  # if > 0, perform REQUEUE_EPOCHS of training, stop, then run the REQUEUE_SCRIPT
         'REQUEUE_SCRIPT':                   Default("", str),  # if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
-        'CHECKPOINT_USE_SAVE_PROCESS':      Default(False, bool)  # Use a process for saving checkpoints to speed up the training loop
+        'CHECKPOINT_USE_SAVE_PROCESS':      Default(False, bool),  # Use a process for saving checkpoints to speed up the training loop
+        'CHECKPOINT_DIRECTORY':             Default("./checkpoints", str),
+        'RESULT_DIRECTORY':                 Default("./results", str)
     }
 
     @classmethod

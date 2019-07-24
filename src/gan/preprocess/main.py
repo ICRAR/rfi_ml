@@ -21,10 +21,11 @@
 #    MA 02111-1307  USA
 #
 
-import os
-import sys
+import os, sys
 
-sys.path.append(os.path.abspath('..'))
+basename = os.path.dirname(__file__)
+sys.path.append(os.path.abspath(os.path.join(basename, "..")))
+sys.path.append(os.path.abspath(os.path.join(basename, "../..")))
 
 import argparse
 import logging
@@ -49,12 +50,17 @@ class PreprocessorMain(object):
         constructor = self.preprocess_readers.get(ext, None)
         if constructor is None:
             raise Exception('Unknown input file type {0}'.format(ext))
-        return constructor(**kwargs)
+        return constructor(**kwargs), ext[1:]
 
     def __call__(self, infilename, outfilename, **kwargs):
-        with HDF5Observation(outfilename) as observation, open(infilename, 'r') as infile:
+        with HDF5Observation(outfilename, mode='w') as observation, open(infilename, 'r') as infile:
             try:
-                preprocessor = self._get_preprocessor(infilename, **kwargs)
+                preprocessor, file_type = self._get_preprocessor(infilename, **kwargs)
+
+                observation.write_defaults()
+                observation.original_file_name = os.path.basename(infilename)
+                observation.original_file_type = file_type
+
                 preprocessor.preprocess(infilename, infile, observation)
             except:
                 LOG.exception('Failed to run preprocessor')
