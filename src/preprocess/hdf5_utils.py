@@ -20,18 +20,52 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+General HDF5 utilities.
+"""
 
 from collections import namedtuple
 
 Attribute = namedtuple('Attribute', 'name type')
 
 
-def get_attr(hdf5_object, attribute):
+def get_attr(hdf5_object, attribute: Attribute):
+    """
+    Get an attribute from an HDF5 object.
+
+    Parameters
+    ----------
+    hdf5_object
+        The HDF5 object to get the attribute from.
+    attribute : Attribute
+        The attribute to get
+
+    Returns
+    -------
+    The attribute's value or None.
+    """
     value = hdf5_object.attrs.get(attribute.name, None)
     return attribute.type(value)
 
 
-def set_attr(hdf5_object, attribute, value):
+def set_attr(hdf5_object, attribute: Attribute, value):
+    """
+    Set an attribute on an HDF5 object.
+
+    Parameters
+    ----------
+    hdf5_object
+        The HDF5 object to get the attribute from.
+    attribute : Attribute
+        The attribute to set.
+    value
+        The value to set the attribute to.
+    Raises
+    -------
+    AttributeError
+        If the provided value is not convertable to the attribute type.
+
+    """
     try:
         value = attribute.type(value)
     except Exception as e:

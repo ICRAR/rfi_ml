@@ -20,33 +20,30 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+Base class for all preprocessors.
+"""
+
+from abc import ABCMeta, abstractmethod
 
 
-class ValidationError(RuntimeError):
-    pass
+class PreprocessReader(metaclass=ABCMeta):
+    """
+    Base class for all preprocess frontend. Simply provides the `src.preprocess.preprocess_reader.PreprocessReader.preprocess` function.
+    """
 
+    @abstractmethod
+    def preprocess(self, name: str, input_file, observation):
+        """
+        Preprocess a file.
 
-def check_type(types, value):
-    if len(types) == 0:
-        return True
-    elif None in types and value is None:
-        return True
-    else:
-        return any(map(lambda t: isinstance(value, t), types))
-
-
-def get_value(d, key, types=[], range_min=None, range_max=None, default_value=None):
-    value = d.get(key, default_value)
-
-    if not check_type(types, value):
-        if len(types) == 1:
-            raise ValidationError('{0} is not of type {1}'.format(key, types[0]))
-        else:
-            raise ValidationError('{0} must be one of the following types {1}'.format(key, types))
-
-    if range_min is not None and value < range_min:
-        raise ValidationError('{0} must be at least {1}'.format(key, range_min))
-    if range_max is not None and value > range_max:
-        raise ValidationError('{0} must be no greater than {1}'.format(key, range_max))
-
-    return value
+        Parameters
+        ----------
+        name : str
+            The file name to process
+        input_file : file
+            The input file open for rading
+        observation : HDF5Observation
+            The observation file to write to
+        """
+        pass

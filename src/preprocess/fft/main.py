@@ -20,43 +20,43 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
-
 """
-Preprocessing pipeline step 2: Perform an FFT over the preprocessed data and save in common format.
+Preprocessing step 2: Converting a `src.preprocess.hdf5_definition.HDF5Observation` into a `src.preprocess.fft.hdf5_fft_definition.HDF5FFTDataSet` file.
 
-- This process should extract multiple of FFT size chunks (e.g. fft x 10) from the input file
-  and place them onto a processing queue.
-- FFT calculation processes should be spawned and accept items from the queue, perform the FFT on the items,
-  then place the result back on a queue destined for this process.
-- This process accepts items from the destination queue (items here contain an index as to which FFT they are)
-  and writes them out to the HDF5 file.
+Run this file directly to invoke the preprocessor.
 """
-import os, sys
-
-basename = os.path.dirname(__file__)
-sys.path.append(os.path.abspath(os.path.join(basename, "..")))
-sys.path.append(os.path.abspath(os.path.join(basename, "../..")))
 
 import math
 import argparse
 import logging
 import numpy as np
-from hdf5_definition import HDF5Observation
-from fft.hdf5_fft_definition import HDF5FFTDataSet
-
-from jobs import JobQueue
 from multiprocessing import Queue
 from queue import Empty, Full
+
+from .hdf5_fft_definition import HDF5FFTDataSet
+from ..hdf5_definition import HDF5Observation
+from ...jobs import JobQueue
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 
 class FFTJob(object):
-    """
-    A single FFT post processing job
-    """
-    def __init__(self, samples, index, num_ffts, fft_size):
+    def __init__(self, samples: np.ndarray, index: int, num_ffts: int, fft_size: int):
+        """
+        A single FFT post processing job
+
+        Parameters
+        ----------
+        samples : np.ndarray
+            The samples to FFT
+        index : int
+            The index in the output `src.preprocess.fft.hdf5_fft_definition.HDF5FFTChannel` to write this result to.
+        num_ffts : int
+            Number of FFTs to perform
+        fft_size : int
+            The size of the FFT window to use
+        """
         self._samples = samples
         self._index = index
         self._num_ffts = num_ffts
@@ -67,7 +67,7 @@ class FFTJob(object):
         result = np.fft.rfft(samples, axis=1)
         abs_result = np.abs(result)
         angle_result = np.angle(result)
-        FFTPostprocessor.return_queue.put([
+        FFTPreprocessor._return_queue.put([
             self._index,
             np.stack((abs_result, angle_result), axis=-1),
             np.min(abs_result), np.max(abs_result),
@@ -75,15 +75,20 @@ class FFTJob(object):
         ])
 
 
-class FFTPostprocessor(object):
-    """
-    FFT Post processor
-    """
+class FFTPreprocessor(object):
 
-    max_queue_checks = 100
-    return_queue = Queue()
+    _max_queue_checks = 100
+    _return_queue = Queue()
 
-    def __init__(self, workers):
+    def __init__(self, workers: int):
+        """
+        FFT preprocessor to perform FFTs in multiple processes at once.
+
+        Parameters
+        ----------
+        workers : int
+            Number of worker processes to use
+        """
         self._workers = workers
         self._fft_size = 0
         self._ffts_per_job = 0
@@ -129,11 +134,11 @@ class FFTPostprocessor(object):
                 except Full:
                     break  # Queue full, cannot add more
 
-            for _ in range(self.max_queue_checks):
+            for _ in range(self._max_queue_checks):
                 try:
                     index, result, \
                     min_abs, max_abs, \
-                    min_angle, max_angle = self.return_queue.get_nowait()
+                    min_angle, max_angle = self._return_queue.get_nowait()
 
                     LOG.info("Received: index {0}, ffts {1}".format(index, result.shape[0]))
 
@@ -148,7 +153,19 @@ class FFTPostprocessor(object):
                 except Empty:
                     break
 
-    def __call__(self, infilename, outfilename, **kwargs):
+    def run(self, infilename: str, outfilename: str, **kwargs):
+        """
+        Run the FFT preprocessor
+
+        Parameters
+        ----------
+        infilename : str
+            The name of the `src.preprocess.hdf5_definition.HDF5Observation` to read from.
+        outfilename : str
+            The name of the file to output a `src.preprocess.fft.hdf5_fft_definition.HDF5FFTDataSet` to.
+        kwargs
+            Arguments for the preprocessor as provided by `parse_args`
+        """
         self._fft_size = kwargs.get('fft_size', 4096)
         self._ffts_per_job = kwargs.get('ffts_per_job', 128)
 
@@ -191,11 +208,29 @@ class FFTPostprocessor(object):
 
 
 def parse_args():
+    """
+    Parse command line arguments for the program
+
+    Arguments
+    ```text
+    input: The input file to run on. This should be a file output by the
+           observation preprocessor
+
+    output: The file to write the FFT data to
+
+    --workers: Number of worker processes to spawn. Default 4.
+
+    --fft_size: Number of samples to include in each FFT. Default 4096.
+
+    --ffts_per_job: Number of FFTs to perform per job submitted to worker
+                    processes.
+    ```
+    """
     parser = argparse.ArgumentParser(
         description="FFT postprocessor to take a preprocessed data set and perform FFTs across each channel"
     )
 
-    parser.add_argument("input", help="The input file to run on. This should be a file output by the preprocessor.")
+    parser.add_argument("input", help="The input file to run on. This should be a file output by the observation preprocessor.")
     parser.add_argument("output", help="The file to write the FFT data to")
     parser.add_argument("--workers", type=int, default=4, help="Number of worker processes to spawn")
     parser.add_argument("--fft_size", type=int, default=4096, help="Number of samples to include in each FFT")
@@ -208,5 +243,5 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     LOG.info('Starting with args: {0}'.format(args))
-    fft_postprocessor = FFTPostprocessor(args.get('workers', 4))
-    fft_postprocessor(args['input'], args['output'], **args)
+    fft_postprocessor = FFTPreprocessor(args.get('workers', 4))
+    fft_postprocessor.run(args['input'], args['output'], **args)

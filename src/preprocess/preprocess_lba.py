@@ -20,6 +20,9 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+Preprocess an lba file into an `src.preprocess.hdf5_definition.HDF5Observation` file.
+"""
 
 import os
 import json
@@ -29,29 +32,34 @@ import logging
 import datetime
 import collections
 from astropy import time
-from preprocess_reader import PreprocessReader
-from dict_validation import get_value
-from lba import LBAFile
+from .preprocess_reader import PreprocessReader
+from .dict_validation import get_value
+from ..lba import LBAFile
 
 LOG = logging.getLogger(__name__)
 
-Scan = collections.namedtuple("Scan", "start stop")
+_Scan = collections.namedtuple("_Scan", "start stop")
 
 
 class PreprocessReaderLBA(PreprocessReader):
-    """
-    Preprocessor that reads an LBA file and writes to an HDF5 definition
-    """
 
-    default_sample_rate = 32000000
+    _default_sample_rate = 32000000
 
     def __init__(self, **kwargs):
+        """
+        Preprocessor that reads an LBA file and writes to an HDF5 definition
+
+        Parameters
+        ----------
+        kwargs
+            Keyword arguments for the processor. See `src.preprocess.main.parse_args`.
+        """
         self.max_samples = get_value(kwargs, 'max_samples', types=[int], range_min=0, default_value=0)
         self.obs_filename = get_value(kwargs, 'lba_obs_file', types=[str, None], default_value=None)
         self.sample_rate = get_value(kwargs, 'sample_rate', types=[int, None], default_value=None)
         if self.sample_rate is None:
-            LOG.warning("No sample rate provided, defaulting to {0}".format(self.default_sample_rate))
-            self.sample_rate = self.default_sample_rate
+            LOG.warning("No sample rate provided, defaulting to {0}".format(self._default_sample_rate))
+            self.sample_rate = self._default_sample_rate
         self.antenna_name = get_value(kwargs, 'lba_antenna_name', types=[str, None], default_value=None)
         if self.obs_filename is not None and self.antenna_name is None:
             raise RuntimeError("LBA file is missing --lba_antenna_name parameter which is needed when using "
@@ -96,6 +104,18 @@ class PreprocessReaderLBA(PreprocessReader):
         observation.create_dataset('sources', data=np.array(sources), dtype=np.uint64)
 
     def preprocess(self, name, input_file, observation):
+        """
+        Preprocess an LBA file.
+
+        Parameters
+        ----------
+        name : str
+            The file name to process
+        input_file : file
+            The input file open for rading
+        observation : HDF5Observation
+            The observation file to write to
+        """
 
         lba = LBAFile(input_file, self.sample_rate)
 

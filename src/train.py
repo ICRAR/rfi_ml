@@ -20,6 +20,9 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+The main training loop for the GAN and autoencoder.
+"""
 
 import argparse
 import logging
@@ -30,13 +33,13 @@ from datetime import datetime
 import torch
 from torch import nn, optim, version
 
-from checkpoint import Checkpoint
-from config import Config
-from data import Data
-from models.autoencoder import Autoencoder
-from models.discriminator import Discriminator
-from models.generator import Generator
-from visualise import Visualiser
+from .checkpoint import Checkpoint
+from .config import Config
+from .data import Data
+from .models.autoencoder import Autoencoder
+from .models.discriminator import Discriminator
+from .models.generator import Generator
+from .visualise import Visualiser
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
@@ -46,14 +49,15 @@ LOG = logging.getLogger(__name__)
 
 
 class Train(object):
-    """
-    Main GAN trainer. Responsible for training the GAN and pre-training the generator autoencoder.
-    """
 
-    def __init__(self, config):
+    def __init__(self, config: Config):
         """
-        Construct a new GAN trainer
-        :param Config config: The parsed network configuration.
+        Main GAN trainer. Responsible for training the GAN and pre-training the generator autoencoder.
+
+        Parameters
+        ----------
+        config : Config
+            The parsed network configuration.
         """
         self.config = config
 
@@ -85,12 +89,13 @@ class Train(object):
             self.discriminator = self._discriminator
             self.generator = self._generator
 
-    def check_requeue(self, epochs_complete):
+    def check_requeue(self, epochs_complete: int) -> bool:
         """
         Check and re-queue the training script if it has completed the desired number of training epochs per session
-        :param int epochs_complete: Number of epochs completed
-        :return: True if the script has been requeued, False if not
-        :rtype bool
+        Parameters
+        ----------
+        epochs_complete : int
+            Number of epochs complete
         """
         if self.config.REQUEUE_EPOCHS > 0:
             if epochs_complete >= self.config.REQUEUE_EPOCHS:
@@ -100,14 +105,22 @@ class Train(object):
                 return True  # Requeue performed
         return False  # No requeue needed
 
-    def load_state(self, checkpoint, module, optimiser=None):
+    def load_state(self, checkpoint: Checkpoint, module: nn.Module, optimiser: optim.Optimizer = None):
         """
         Load the provided checkpoint into the provided module and optimiser.
-        This function checks whether the load threw an exception and logs it to the user.
-        :param Checkpoint checkpoint: The checkpoint to load
-        :param module: The pytorch module to load the checkpoint into.
-        :param optimiser: The pytorch optimiser to load the checkpoint into.
-        :return: None if the load failed, int number of epochs in the checkpoint if load succeeded
+
+        Parameters
+        ----------
+        checkpoint : Checkpoint
+            The checkpoint to load
+        module : nn.Module
+            The pytorch module to load the checkpoint into.
+        optimiser : optim.Optimizer
+            The pytorch optimiser to load the checkpoint into.
+
+        Returns
+        -------
+        None if the load failed, int number of epochs in the checkpoint if load succeeded
         """
         try:
             module.load_state_dict(checkpoint.module_state)
@@ -115,7 +128,8 @@ class Train(object):
                 optimiser.load_state_dict(checkpoint.optimiser_state)
             return checkpoint.epoch
         except RuntimeError as e:
-            LOG.exception("Error loading module state. This is most likely an input size mismatch. Please delete the old module saved state, or change the input size")
+            LOG.exception("Error loading module state. This is most likely an input size mismatch. "
+                          "Please delete the old module saved state, or change the input size")
             return None
 
     def close(self):
@@ -124,24 +138,33 @@ class Train(object):
         """
         self.data_loader.close()
 
-    def generate_labels(self, num_samples, pattern):
+    def generate_labels(self, num_samples: int, pattern: list):
         """
         Generate labels for the discriminator.
-        :param int num_samples: Number of input samples to generate labels for.
-        :param list pattern: Pattern to generator. Should be either [1, 0], or [0, 1]
-        :return: New labels for the discriminator
+
+        Parameters
+        ----------
+        num_samples : int
+            Number of input samples to generate labels for.
+        pattern : list
+            Pattern to generator. Should be either [1, 0], or [0, 1]
+
+        Returns
+        -------
+        New labels for the discriminator
         """
         var = torch.FloatTensor([pattern] * num_samples)
         return var.cuda() if self.config.USE_CUDA else var
 
-    def _train_autoencoder(self):
+    def train_autoencoder(self):
         """
-        Main training loop for the autencoder.
+        Main training loop for the autoencoder.
+
+        Returns
+        -------
         This function will return False if:
         - Loading the autoencoder succeeded, but the NN model did not load the state dicts correctly.
         - The script needs to be re-queued because the NN has been trained for REQUEUE_EPOCHS
-        :return: True if training was completed, False if training needs to continue.
-        :rtype bool
         """
 
         criterion = nn.SmoothL1Loss()
@@ -208,12 +231,13 @@ class Train(object):
         LOG.info("Autoencoder training complete")
         return True  # Training complete
 
-    def _train_gan(self):
+    def train_gan(self):
         """
-        TODO: Add in autoencoder to perform dimensionality reduction on data
-        TODO: Not working yet - trying to work out good autoencoder model first
-        :return:
+        Main training loop for the gan.
         """
+
+        # TODO: Add in autoencoder to perform dimensionality reduction on data
+        # TODO: Not working yet - trying to work out good autoencoder model first
 
         criterion = nn.BCELoss()
         discriminator_optimiser = optim.Adam(self.discriminator.parameters(), lr=0.003, betas=(0.5, 0.999))
@@ -327,9 +351,9 @@ class Train(object):
 
         LOG.info("GAN Training complete")
 
-    def __call__(self):
+    def train(self):
         """
-        Main training loop for the GAN.
+        Main training loop for the GAN and autoencoder.
         The training process is interruptable; the model and optimiser states are saved to disk each epoch, and the
         latest states are restored when the trainer is resumed.
 
@@ -350,10 +374,10 @@ class Train(object):
 
         # Load the autoencoder, and train it if needed.
         #if not self._train_autoencoder():
-            # Autoencoder training incomplete
+        # Autoencoder training incomplete
         #    return
 
-        self._train_gan()
+        self.train_gan()
 
 
 def parse_args():
@@ -370,5 +394,5 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     train = Train(Config(args['config_file']))
-    train()
+    train.train()
     train.close()

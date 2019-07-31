@@ -14,7 +14,7 @@
 /src/gan/checkpoint_generator_autoencoder/
 /src/gan/checkpoint_generator_complete/
 /src/gan/checkpoint_generator_decoder_complete/
-/evlbi_software/vsib_util/lba2mk5b
-/evlbi_software/vsib_util/vsib_header
-/evlbi_software/vsib_util/vsib_checker
+/vlba_reference/evlbi_software/vsib_util/lba2mk5b
+/vlba_reference/evlbi_software/vsib_util/vsib_header
+/vlba_reference/evlbi_software/vsib_util/vsib_checker
 /**/__pycache__/

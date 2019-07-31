@@ -20,9 +20,8 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
-
 """
-Utilities for loading LBA files
+Class for loading .lba files as numpy arrays.
 """
 
 import mmap
@@ -38,16 +37,7 @@ LOG = logging.getLogger(__name__)
 
 
 class LBAFile(object):
-    """
-    Allows reading a huge LBA file using memory mapping so my IDE doesn't
-    crash while trying to load 4+gb of data into ram.
-
-    with open open('file', 'r') as f:
-        lba = LBAfile(f)
-        data = lba.read()
-    """
-
-    date_regex = re.compile(r"(?P<year>[0-9]{4})(?P<month>[0-9]{2})(?P<day>[0-9]{2}):"
+    _date_regex = re.compile(r"(?P<year>[0-9]{4})(?P<month>[0-9]{2})(?P<day>[0-9]{2}):"
                             r"(?P<hour>[0-9]{2})(?P<minute>[0-9]{2})(?P<second>[0-9]{2})")
 
     # For the Numpy array holding the data
@@ -76,25 +66,41 @@ class LBAFile(object):
     # | Channel 8	    | DAS #2 IFP#2-HI 6658 - 6674 MHz USB LCP |
     # enddef;
 
-    byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
+    _byte_unpack_map = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
     def __init__(self, f, sample_rate):
         """
-        :param f: opened file
-        :param sample_rate: The sample rate in HZ of the LBA file.
+        Load an LBA file to read samples from it as numpy arrays.
+        ```python
+        with open open('file', 'r') as f:
+            lba = LBAfile(f)
+            data = lba.read()
+        ```
+        Parameters
+        ----------
+        f : file
+            The open file to read from
+        sample_rate : int
+            The sample rate of the data in the file, in Hz
         """
-        self.mm = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+        self._mm = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
         self.header = self._read_header()
-        self.size = os.fstat(f.fileno()).st_size
-        self.sample_rate = sample_rate
-        self.read_chunk_size = 4096
+        """
+        dict: The LBA header file. A dict containing key-value parsed pased from the LBA header.
+        """
+        self._size = os.fstat(f.fileno()).st_size
+        self._sample_rate = sample_rate
+        self._read_chunk_size = 4096
 
     @property
-    def num_channels(self):
+    def num_channels(self) -> int:
+        """
+        int: Count of the number of channels stored within the LBA file.
+        """
         return int(self.header["NCHAN"])
 
     @property
-    def bytes_per_sample(self):
+    def _bytes_per_sample(self):
         num_chan = self.num_channels
         num_bits = int(self.header["NUMBITS"])
         bandwidth = int(float(self.header["BANDWIDTH"]))
@@ -107,14 +113,19 @@ class LBAFile(object):
 
     @property
     def max_samples(self):
-        data_size = self.size - int(self.header["HEADERSIZE"])
-        max_samples = data_size // self.bytes_per_sample
+        """
+        int: Maximum number of samples that can be read from the LBA file.
+        """
+        data_size = self._size - int(self.header["HEADERSIZE"])
+        max_samples = data_size // self._bytes_per_sample
         return max_samples
 
     @property
     def obs_start(self):
-        # Parse the header TIME header element into a proper time
-        matches = self.date_regex.match(self.header["TIME"])
+        """
+        datetime: Get the time that this observation started, from the TIME header value.
+        """
+        matches = self._date_regex.match(self.header["TIME"])
         if matches is None:
             return None
         else:
@@ -128,22 +139,35 @@ class LBAFile(object):
             )
 
     def obs_length(self, samples=None):
+        """
+        Determine how long part or all of this LBA file is, in seconds.
+        This is based on the sample rate.
+
+        Parameters
+        ----------
+        samples : int
+            If provided, determine how long this many samples is, in seconds.
+            If not provided, determine how long the entire LBA file is, in seconds.
+
+        Returns
+        -------
+        int: Length of the provided number of samples, in seconds.
+        """
         if samples is None:
             samples = self.max_samples
-        return samples / self.sample_rate
+        return samples / self._sample_rate
 
     def _read_header(self):
         """
         Reads in an LBA header and stores it in self.header
         It's basically just a flat key = value structure
-        :return:
         """
         header = {}
 
         bytecount = 0
         expected_size = None  # Expected size of the header. We'll know this once we hit the "HEADERSIZE" field
         while True:
-            line = self.mm.readline()
+            line = self._mm.readline()
             if line is None:
                 break
 
@@ -171,9 +195,26 @@ class LBAFile(object):
         Reads a set of samples out of the lba file.
         Note that you can read samples from anywhere in the file by specifying
         an offset to start at.
-        :param offset: Sample index to start at (0 indexed)
-        :param samples: Number of samples to read from that index.
-        :return: ndarray with X = samples, Y = channels
+
+        Parameters
+        ----------
+        offset : int
+            Sample index to start at (0 indexed)
+        samples : int
+            Number of samples to read from that index.
+        Returns
+        -------
+        ndarray: with X = samples, Y = channels
+        Raises
+        -------
+        Exception
+            In any of the following cases:
+
+            - samples < 0
+            - offset < 0
+            - samples > max_samples
+            - offset > max_samples
+            - offset + samples > max_samples
         """
         if samples < 0:
             raise Exception("Negative samples requested")
@@ -196,7 +237,7 @@ class LBAFile(object):
         val_map = [3, 1, -1, -3]  # 2 bit encoding map
 
         # Calculate number of bytes per sample
-        bytes_per_sample = self.bytes_per_sample
+        bytes_per_sample = self._bytes_per_sample
 
         # Max samples that can be requested from the file
         max_samples = self.max_samples
@@ -221,7 +262,7 @@ class LBAFile(object):
         sample_mask = (1 << num_bits) - 1
 
         # Seek to the desired offset
-        self.mm.seek(data_start + sample_offset, os.SEEK_SET)
+        self._mm.seek(data_start + sample_offset, os.SEEK_SET)
 
         # X = samples, Y = channels.
         nparray = np.zeros((samples, num_chan), dtype=np.int8)
@@ -230,25 +271,25 @@ class LBAFile(object):
         samples_read = 0  # Number of samples read, including skipped samples every 32M samples
 
         # Determine the data type of each sample (1 = uint8, 2 = uint16, 4 = uint32, 8 = uint64)
-        struct_unpack_type = self.byte_unpack_map[bytes_per_sample]
+        struct_unpack_type = self._byte_unpack_map[bytes_per_sample]
         # Cache the structure unpack format for each read.
         # This is a string containing the format repeated for each sample read
-        struct_unpack_fmt = struct_unpack_type * self.read_chunk_size
+        struct_unpack_fmt = struct_unpack_type * self._read_chunk_size
         while True:
-            samples_to_read = min(samples - samples_output, self.read_chunk_size)
-            if samples_to_read != self.read_chunk_size:
+            samples_to_read = min(samples - samples_output, self._read_chunk_size)
+            if samples_to_read != self._read_chunk_size:
                 # Different format for reading out the last set of bytes that might not be of the
                 # chunk size cached above
                 struct_unpack_fmt = struct_unpack_type * samples_to_read
 
             # Read a whole chunk instead of an individual sample for speed
-            data_chunk = self.mm.read(samples_to_read * bytes_per_sample)
+            data_chunk = self._mm.read(samples_to_read * bytes_per_sample)
             # Unpack chunk into an array of correctly sized integers
             samples_chunk = struct.unpack(struct_unpack_fmt, data_chunk)
 
             for intdata in samples_chunk:
                 # This now just checks if this is the case but doesn't skip it
-                if (samples_read + offset) % self.sample_rate == 0:
+                if (samples_read + offset) % self._sample_rate == 0:
                     # Richard said this was all 0s but it was actually all 1s, I hope this is correct.
                     if intdata != 65535:
                         LOG.info("Skip value should have been 65535 at sample {0}. Data may be corrupted.".format(
@@ -277,4 +318,4 @@ class LBAFile(object):
         return nparray
 
     def __del__(self):
-        self.mm.close()
+        self._mm.close()

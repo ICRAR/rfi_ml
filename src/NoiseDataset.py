@@ -20,12 +20,15 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+A pytorch dataset that generates gaussian noise in a desired shape.
+"""
 
 import numpy as np
 from torch.utils.data import Dataset
 
 
-def generate_fake_noise(inputs, size):
+def _generate_fake_noise(inputs, size):
     """
     Generate fake noise
     Generate gaussian noise using -0.0289923828125, 1.9391296947313124 as mean and stddev. These are the
@@ -40,33 +43,55 @@ def generate_fake_noise(inputs, size):
 
 
 class NoiseDataset(Dataset):
-    """
-    Generates gaussian noise on the fly.
-    """
 
-    def __init__(self, width, length):
+    def __init__(self, width: int, length: int):
         """
-        Create a new noise dataset
-        :param int width: With of the noise.
-        :param int length: Size of the dataset. This is needed for Pytorch data loaders to operate correctly.
-        """
-        self.width = width
-        self.length = length
+        Generates gaussian noise on the fly.
 
-    def __getitem__(self, item):
+        Implements `__getitem__` and `__len__`
+        ```python
+        d = NoiseDataset(10, 1000)
+
+        # 1000
+        len(d)
+
+        # ndarray(10,)
+        d[0]
+        ```
+
+        Parameters
+        ----------
+        width : int
+            Width of the noise.
+        length : int
+            Size of the dataset. This is needed for Pytorch data loaders to operate correctly.
+        """
+        self._width = width
+        self._length = length
+
+    def __getitem__(self, item: int) -> np.ndarray:
         """
         Generate a new input of gaussian noise.
-        :param int item: Needed for __getitem__. Unused.
-        :return np.array: Numpy array containing the data
+
+        Parameters
+        ----------
+        item : int
+            Unused
+
+        Returns
+        -------
+        Numpy array containing the data, with the shape (width,)
         """
-        data = np.random.normal(0, 1.0, self.width).astype(np.float32)
+        data = np.random.normal(0, 1.0, self._width).astype(np.float32)
         return data
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Get the length of the dataset.
-        THis is needed for Pytorch data loaders to operate correctly.
-        :return: Length of the noise dataset
-        :rtype int
+        This is needed for Pytorch data loaders to operate correctly.
+
+        Returns
+        -------
+        int: Length of the noise dataset
         """
-        return self.length
+        return self._length

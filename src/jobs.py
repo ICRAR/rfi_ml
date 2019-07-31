@@ -21,21 +21,36 @@
 #    MA 02111-1307  USA
 #
 
+"""
+Manages a multi-process job and worker queue.
+"""
+
+from typing import Callable
 from multiprocessing import JoinableQueue, Process
-import traceback, sys
+import traceback
+import sys
 
 
 class Consumer(Process):
-    """
-    A class to process jobs from the queue
-    """
-    def __init__(self, queue):
+    def __init__(self, queue: JoinableQueue):
+        """
+        A consumer process gets jobs from the queue and executes them
+        until it receives a None poison pill when it stops and shuts down.
+
+        Parameters
+        ----------
+        queue : JoinableQueue
+            The JoinableQueue that this consumer should get its jobs from
+        """
         Process.__init__(self)
         self._queue = queue
 
     def run(self):
         """
-        Sit in a loop
+        Run the Consumer thread, accepting jobs from the queue until a None job
+        is received.
+        Any uncaught exceptions raised by the job will be logged and the job
+        will be cancelled.
         """
         while True:
             next_task = self._queue.get()
@@ -55,19 +70,53 @@ class Consumer(Process):
 
 class JobQueue(object):
 
-    def __init__(self, num_processes=8):
-        self.queue = JoinableQueue()
-        self.consumers = [Consumer(self.queue) for _ in range(num_processes)]
-        for consumer in self.consumers:
+    def __init__(self, num_processes: int = 8):
+        """
+        A job queue that contains a number of `Consumer` processes that run jobs submitted to the queue.
+
+        Parameters
+        ----------
+        num_processes : int
+            Number of `Consumer` processes to run for this queue.
+        """
+        self._queue = JoinableQueue()
+        self._consumers = [Consumer(self._queue) for _ in range(num_processes)]
+        for consumer in self._consumers:
             consumer.start()
 
     def join(self):
-        for _ in self.consumers:
-            self.queue.put(None)
-        self.queue.join()
+        """
+        Join the queue, submitting a poison pill to each `Consumer` and waiting for them to all shut down.
+        """
+        for _ in self._consumers:
+            self._queue.put(None)
+        self._queue.join()
 
-    def submit(self, job):
-        self.queue.put(job)
+    def submit(self, job: Callable[[], None]):
+        """
+        Submit a job to the queue.
+        This call will wait for space if the queue is full.
+
+        Parameters
+        ----------
+        job : Callable[None, None]
+            The job to submit to the job queue
+        """
+        self._queue.put(job)
 
     def submit_no_wait(self, job):
-        self.queue.put_nowait(job)
+        """
+        Submit a job to the queue without waiting.
+
+        Parameters
+        ----------
+        job : Callable[None, None]
+            The job to submit to the job queue
+
+        Raises
+        ----------
+        JoinableQueue.Full
+            If the queue is full.
+
+        """
+        self._queue.put_nowait(job)

@@ -21,11 +21,16 @@
 #    MA 02111-1307  USA
 #
 
+"""
+Load a pytorch dataset from an HDF5 file stored in the HDF5 FFT format.
+"""
+
 import logging
 import math
 import numpy as np
 from torch.utils.data import Dataset
-from preprocess.fft.hdf5_fft_definition import HDF5FFTDataSet
+
+from .preprocess.fft.hdf5_fft_definition import HDF5FFTDataSet
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
@@ -33,20 +38,28 @@ LOG = logging.getLogger(__name__)
 
 # TODO: Allow specification of specific channels to use
 class HDF5Dataset(Dataset):
-    """
-    Creates a dataset to loop over all of the NN inputs contained within an HDF5 file
-    that was exported from an LBA file using the FFT preprocessor.
-    """
 
-    def __init__(self, filename, **kwargs):
+    def __init__(self, filename: str, **kwargs):
         """
-        Initialises the HDF5 dataset
-        :param filename: The filename to read the dataset from
-        :param kwargs:
-            polarisations: A list of polarisations (0 to 1) that should be included in the data
-            frequencies: A list of frequencies (0 to 3) that should be included in the data
-            max_inputs: Maximum number of inputs to get per polarisation, frequency pair
-            normalise: Normalise the data as per the dataset min and max values in the HDF5 file
+        Creates a dataset to loop over each network input stored in an HDF5 FFT file.
+
+        Each input is a 2D array of values containing the absolute and angle FFT values of size (fft_size, 2).
+        Where the X dimension contains the FFT data, Y[0] contains the absolute values and Y[1] contains the angle
+        values.
+
+        Parameters
+        ----------
+        filename : string
+            The filename to read the dataset from
+        **kwargs
+            `horizontal_concatenate`: Output is concatenated into a single array of size (fft_size * 2, ) in which the
+            absolute values and angle values are concatenated together.
+
+            `use_cache`: True to cache data read from the HDF5. False to not
+
+            `max_inputs`: Maximum number of inputs to read from the HDF5 file.
+
+            `normalise`: Normalise the data as per the dataset min and max values in the HDF5 file.
         """
         super(HDF5Dataset, self).__init__()
 
@@ -90,18 +103,9 @@ class HDF5Dataset(Dataset):
         self.normalise = kwargs.get('normalise', False)
 
     def __len__(self):
-        """
-        :return: Number of inputs in the dataset
-        """
         return self.max_inputs * self.num_channels
 
     def __getitem__(self, i):
-        """
-        Gets an NN input from the dataset. This will iterate over all of the selected
-        polarisations and frequencies.
-        :param i: The index to get.
-        :return: A single NN input
-        """
         if self.use_cache:
             cached = self.cache.get(i, None)
             if cached is not None:
@@ -142,12 +146,14 @@ class HDF5Dataset(Dataset):
 
         return data
 
-    def get_configuration(self):
+    def get_configuration(self) -> dict:
         """
         Gets the current dataset configuration as a dictionary.
         Useful for printing out the configuration.
-        :return: Dataset configuration
-        :rtype dict
+
+        Returns
+        ----------
+        dict: Dataset configuration
         """
         return {
             'fft_count': self.fft_count,
@@ -164,9 +170,13 @@ class HDF5Dataset(Dataset):
         """
         self.hdf5.close()
 
-    def get_input_shape(self):
+    def get_input_shape(self) -> tuple:
         """
-        :return: The shape of each input returned by this dataset
+        Get the shape of each input returned by this dataset
+
+        Returns
+        ----------
+        int: Input shape tuple.
         """
         if self.horizontal_concatenate:
             return int(self.input_size),

@@ -20,6 +20,9 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+Generates visualisations and plots for GAN and autoencoder training.
+"""
 
 import os
 import logging
@@ -27,13 +30,29 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from jobs import JobQueue
+from typing import Union, List
+
+from .jobs import JobQueue
 
 LOG = logging.getLogger(__name__)
 
 
 class PdfPlotter(object):
     def __init__(self, filename, split=False):
+        """
+        Creates PDF plots.
+        ```python
+        with PdfPlotter("plots.pdf") as pdf:
+            pdf.plot_output(data, "Some data")
+        ```
+
+        Parameters
+        ----------
+        filename : Union[str, list]
+            The filename to save the PDF to
+        split : boolean
+
+        """
         self.filename = filename
         self.pdf = None
         self.split = split
@@ -48,7 +67,17 @@ class PdfPlotter(object):
         self.pdf = None
         return self
 
-    def plot_learning(self, data, title):
+    def plot_learning(self, data: List[float], title: Union[str, list]):
+        """
+        Plot the learning of a model to the PDF file.
+
+        Parameters
+        ----------
+        data
+            The learning data
+        title : str
+            The plot title
+        """
         fig = plt.figure(figsize=(16, 9), dpi=80)
         plt.title(title)
         plt.xlabel('Step')
@@ -59,7 +88,17 @@ class PdfPlotter(object):
         fig.clear()
         plt.close(fig)
 
-    def plot_output(self, data, title):
+    def plot_output(self, data, title: Union[str, list]):
+        """
+        Plot the output of a model to the PDF file.
+
+        Parameters
+        ----------
+        data
+            The output data
+        title : Union[str, list]
+            The plot title
+        """
 
         def plot_single(data, title):
             plt.title(title)
@@ -89,7 +128,21 @@ class PdfPlotter(object):
 
 
 class AutoEncoderTest(object):
-    def __init__(self, directory, epoch, out, real):
+    def __init__(self, directory: str, epoch: int, out, real):
+        """
+        A job to plot the test output from the autoencoder
+
+        Parameters
+        ----------
+        directory : str
+            The directory to save the plot to.
+        epoch : int
+            The training epoch
+        out
+            The autoencoder's output
+        real
+            The real data
+        """
         self.directory = directory
         self.epoch = epoch
         self.out = out
@@ -107,7 +160,25 @@ class AutoEncoderTest(object):
 
 
 class GANTest(object):
-    def __init__(self, directory, epoch, gen_out, real_out, discriminator_out, discriminator_real):
+    def __init__(self, directory: str, epoch: int, gen_out, real_out, discriminator_out, discriminator_real):
+        """
+        A job to plot the output from the generator and discriminator of the GAN.
+
+        Parameters
+        ----------
+        directory : str
+            The directory to save the plot to.
+        epoch : int
+            The training epoch
+        gen_out
+            The generator's output
+        real_out
+            The real output
+        discriminator_out
+            The discriminators output
+        discriminator_real
+            The real output
+        """
         self.directory = directory
         self.epoch = epoch
         self.gen_out = gen_out
@@ -134,7 +205,23 @@ class GANTest(object):
 
 
 class PlotLearning(object):
-    def __init__(self, directory, epoch, d_loss_real, d_loss_fake, g_loss):
+    def __init__(self, directory: str, epoch: int, d_loss_real: List[float], d_loss_fake: List[float], g_loss: List[float]):
+        """
+        A job to plot the learning of the GAN
+
+        Parameters
+        ----------
+        directory : str
+            The directory to save the plot to.
+        epoch : int
+            The training epoch
+        d_loss_real : List[float]
+            The loss of the discriminator on real data.
+        d_loss_fake : List[float]
+            The loss of the discriminator on fake data.
+        g_loss : List[float]
+            The loss of the generator.
+        """
         self.directory = directory
         self.epoch = epoch
         self.d_loss_real = d_loss_real
@@ -152,7 +239,32 @@ class PlotLearning(object):
 
 
 class Visualiser(object):
-    def __init__(self, base_directory):
+    def __init__(self, base_directory: str):
+        """
+        Handle the creation of visualisation plots for each training epoch of GAN or autoencoder training
+        ```python
+        with Visualiser(vis_path) as vis:
+            epoch = 0
+            while(epoch < 10):
+                step = 0
+                while(step < 100):
+                    # perform training step
+                    # ...
+                    # add training losses to visualiser
+                    vis.step(d_loss_real, d_loss_fake, g_loss)
+                    step += 1
+
+                # plot training at the end of the epoch
+                vis.plot_training(epoch)
+                epoch += 1
+
+        ```
+
+        Parameters
+        ----------
+        base_directory : str
+            The directory to store the plots into
+        """
         self.d_loss_real = []
         self.d_loss_fake = []
         self.g_loss = []
@@ -169,15 +281,51 @@ class Visualiser(object):
         os.makedirs(self.base_directory, exist_ok=True)
         return self.base_directory
 
-    def step(self, d_loss_real, d_loss_fake, g_loss):
+    def step(self, d_loss_real: float, d_loss_fake: float, g_loss: float):
+        """
+        Add loss data for a single GAN training step
+
+        Parameters
+        ----------
+        d_loss_real : float
+            The discriminator's loss on real data.
+        d_loss_fake : float
+            The discriminator's loss on fake data.
+        g_loss : float
+            The generator's loss
+        """
         self.d_loss_real.append(d_loss_real)
         self.d_loss_fake.append(d_loss_fake)
         self.g_loss.append(g_loss)
 
-    def step_autoencoder(self, loss):
+    def step_autoencoder(self, loss : float):
+        """
+        Add loss for a single autoencoder training step
+
+        Parameters
+        ----------
+        loss : float
+            The loss
+        """
         self.g_loss.append(loss)
 
-    def test(self, epoch, discriminator, generator, noise, real):
+    def test(self, epoch: int, discriminator, generator, noise, real):
+        """
+        Test the discriminator and generator on the provided noise and real data and generate plots for the test.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch
+        discriminator
+            The discriminator
+        generator
+            The generator
+        noise
+            The noise data
+        real
+            The real data
+        """
         generator.eval()
         discriminator.eval()
         out = generator(noise)
@@ -190,15 +338,35 @@ class Visualiser(object):
         generator.train()
         discriminator.train()
 
-    def test_autoencoder(self, epoch, generator, real):
-        generator.eval()
+    def test_autoencoder(self, epoch: int, autoencoder, real):
+        """
+        Test the autoencoder on the provided data.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch
+        autoencoder
+            The autoencoder
+        real
+            The real data to test on
+        """
+        autoencoder.eval()
         self.queue.submit(AutoEncoderTest(directory=self._get_directory(),
                                           epoch=epoch,
-                                          out=generator(real[:10]).cpu().data.numpy(),
+                                          out=autoencoder(real[:10]).cpu().data.numpy(),
                                           real=real[:10].cpu().data.numpy()))
-        generator.train()
+        autoencoder.train()
 
-    def plot_training(self, epoch):
+    def plot_training(self, epoch: int):
+        """
+        Plot the current training accumulated with `Visualiser.step`.
+
+        Parameters
+        ----------
+        epoch : int
+            The current epoch
+        """
         self.queue.submit(PlotLearning(directory=self._get_directory(),
                                        epoch=epoch,
                                        d_loss_real=self.d_loss_real,

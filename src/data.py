@@ -20,31 +20,51 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+Provides an iterator over and HDF5 dataset and gaussian noise sources for GAN training.
+"""
 
 import logging
 
 from torch.utils.data import DataLoader
 
-from HDF5Dataset import HDF5Dataset
-from NoiseDataset import NoiseDataset
+from .HDF5Dataset import HDF5Dataset
+from .NoiseDataset import NoiseDataset
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 LOG = logging.getLogger(__name__)
 
 
 class Data(object):
-    """
-    Provides access to an iterator over a set of training data. The training data consists of data read from an HDF5
-    file along with two generated gaussian noise datasets
-    """
 
-    def __init__(self, filename, batch_size, **kwargs):
+    def __init__(self, filename: str, batch_size: int, **kwargs):
         """
-        Create a new dataset from the provided HDF5 file.
-        :param str filename: The HDF5 file to load the data from.
-        :param str data_type: Type of data to return from the HDF5 file.  See :func:`~gan.HDF5Dataset`
-        :param int batch_size: Number of NN inputs to include in each batch.
-        :param kwargs: kwargs to pass to the :func:`~gan.HDF5Dataset` constructor.
+        Provides access to an iterator over a set of training data. The training data consists of data read from an HDF5
+        file along with two generated gaussian noise datasets.
+
+        Noise data is provided by `src.NoiseDataset.NoiseDataset` and HDF5 data is provided by
+        `src.HDF5Dataset.HDF5Dataset`.
+
+        Data will be in the shape (`src.HDF5Dataset.HDF5Dataset.get_input_shape`, `batch_size`).
+        ```python
+        data = Data("fft.hdf5", 128)
+        for data, noise1, noise2 in data:
+            # Do something with data loaded from "fft.hdf5"
+            # Assuming each input in fft.hdf5 is of size 1024, then the shape of
+            # data, noise1, and noise2 is (1024, 128)
+            module(data)
+        ```
+
+        The data set can be iterated multiple times and the iteration order will be random each time.
+
+        Parameters
+        ----------
+        filename : str
+            The HDF5 file to load the data from.
+        batch_size : int
+            Number of NN inputs to include in each batch.
+        kwargs
+            Keyword arguments to pass to the `HDF5Dataset` constructor.
         """
         self.hdf5_dataset = HDF5Dataset(filename, **kwargs)
 
@@ -94,8 +114,10 @@ class Data(object):
     def get_input_shape(self):
         """
         Get the shape of a single input returned from this dataset
-        :return: Width of a single input
-        :rtype int
+
+        Returns
+        -------
+        int: Width of a single input
         """
         return self.hdf5_dataset.get_input_shape()
 

@@ -20,6 +20,9 @@
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 #    MA 02111-1307  USA
 #
+"""
+Preprocess an india powerline text file into an `src.preprocess.hdf5_definition.HDF5Observation` file.
+"""
 
 import os
 import json
@@ -27,19 +30,29 @@ import logging
 import itertools
 import datetime
 import numpy as np
-from preprocess_reader import PreprocessReader
+
+from .hdf5_definition import HDF5Observation
+from .preprocess_reader import PreprocessReader
 
 LOG = logging.getLogger(__name__)
 
 
-def grouper(iterable, n, fillvalue=None):
+def _grouper(iterable, n, fillvalue=None):
     """
     Collect data into fixed-length chunks or blocks.
+    ```python
     grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    :param iterable:
-    :param n:
-    :param fillvalue:
-    :return:
+    ```
+
+    Parameters
+    ----------
+    iterable
+    n
+    fillvalue
+
+    Returns
+    -------
+
     """
     args = [iter(iterable)] * n
     return itertools.zip_longest(fillvalue=fillvalue, *args)
@@ -47,8 +60,8 @@ def grouper(iterable, n, fillvalue=None):
 
 class PreprocessReaderIndiaTXT(PreprocessReader):
 
-    write_cache_size = 1024 * 1024
-    header_types = {
+    _write_cache_size = 1024 * 1024
+    _header_types = {
         'Segments': int,
         'SegmentSize': int,
         'Segment': int,
@@ -57,17 +70,25 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
     }
 
     def __init__(self, **kwargs):
+        """
+        Preprocess an India powerline text file.
+
+        Parameters
+        ----------
+        kwargs
+            Keyword arguments for the processor. See `src.preprocess.main.parse_args`.
+        """
         self.sample_rate = kwargs.get('sample_rate', 200000000)  # 200MHz
         if self.sample_rate is None:
             self.sample_rate = 200000000
 
     @classmethod
-    def read_header(cls, input_file):
+    def _read_header(cls, input_file):
         header = {}
 
         def update(new_dict):
             for k, v in new_dict:
-                converter = cls.header_types.get(k, None)
+                converter = cls._header_types.get(k, None)
                 header[k] = converter(v) if converter is not None else v
 
         # First line contains some random things
@@ -77,7 +98,7 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
         # Second line also contains random things, but they seem to have a kv mapping
         # between each set of 2 elements
         line_split = input_file.readline().strip().split(',')
-        update(grouper(line_split, 2))
+        update(_grouper(line_split, 2))
 
         # Next two lines seem to map to each other
         line_split1 = input_file.readline().strip().split(',')
@@ -89,8 +110,20 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
 
         return header
 
-    def preprocess(self, name, input_file, observation):
-        header = self.read_header(input_file)
+    def preprocess(self, name: str, input_file, observation: HDF5Observation):
+        """
+        Preprocess an india powerline file.
+
+        Parameters
+        ----------
+        name : str
+            The file name to process
+        input_file : file
+            The input file open for rading
+        observation : HDF5Observation
+            The observation file to write to
+        """
+        header = self._read_header(input_file)
 
         num_samples = int(header["SegmentSize"])
 
@@ -104,7 +137,7 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
         channel = observation.create_channel("channel_0", (num_samples,), dtype=np.float32)
         channel.write_defaults()
 
-        out_array = np.zeros(shape=(self.write_cache_size,), dtype=np.float32)
+        out_array = np.zeros(shape=(self._write_cache_size,), dtype=np.float32)
         cache_count = 0
         write_index = 0
         first_time = None
@@ -116,11 +149,11 @@ class PreprocessReaderIndiaTXT(PreprocessReader):
             if first_time is None:
                 first_time = float(line_split[0])
 
-            if cache_count == self.write_cache_size:
+            if cache_count == self._write_cache_size:
                 LOG.info("Writing out {0} samples at index {1}".format(out_array.shape[0], write_index))
                 channel.write_data(write_index, out_array)
                 cache_count = 0
-                write_index += self.write_cache_size
+                write_index += self._write_cache_size
 
         if cache_count > 0:
             channel.write_data(write_index, out_array[:cache_count])

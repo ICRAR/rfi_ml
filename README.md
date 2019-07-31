@@ -1,6 +1,14 @@
 # rfi_ml
 Machine learning code for RFI 
 
+## Documentation Generation
+```python
+source venv/bin/activate
+pip install pdoc3
+pdoc3 --html src --force
+```
+The documentation will be available in `html` for browsing.
+
 ## GAN
 The main code for pre-processing data and running the GAN can be found in the `gan` directory.
 
