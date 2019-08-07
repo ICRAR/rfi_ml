@@ -33,6 +33,7 @@ source venv/bin/activate
 pdoc3 --html src --force
 ```
 The documentation will be available in `html` for browsing.
+Additionally, documentation is written in [numpydoc](https://numpydoc.readthedocs.io/en/latest/format.html#overview) format
 
 ## Configuration
 Default config file creation
