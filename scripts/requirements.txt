@@ -1,12 +1,10 @@
 astropy
-baseband
 configobj
 h5py
 matplotlib
 numpy
 pip
 scipy
-setuptools
 torch
 torchvision
 pdoc3

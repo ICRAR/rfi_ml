@@ -6,16 +6,14 @@ All of the scripts in this file must be run from the root of the repository.
 ## Installation
 Virtual Env installation
 ```bash
-# if virtualenv is not already installed
-pip install virtualenv
-
 # Create venv and install dependencies
-virtualenv venv
+python3 -m venv venv
 source venv/bin/activate
-pip install scripts/requirements.txt
+pip install -r scripts/requirements.txt
 
 # Install pyvex for reading .vex files
-python pyvex/setup.py install
+cd pyvex/pyvex
+python setup.py install
 ```
 
 ## Preprocessing

@@ -6,6 +6,11 @@ PREPROCESS_FFT="src.preprocess.fft.main"
 DATA_PATH="data/raw/vlba"
 OUTPUT_PATH="data/processed"
 
+if [[ ! -d ${DATA_PATH} ]]; then
+    echo "${DATA_PATH} does not exist"
+fi
+
+
 mkdir -p ${OUTPUT_PATH}
 
 source venv/bin/activate

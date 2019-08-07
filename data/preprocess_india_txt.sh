@@ -7,6 +7,10 @@ DATA_PATH="data/raw/power_line_RFI_data"
 OUTPUT_PATH="data/processed"
 SAMPLE_RATE="200000000"
 
+if [[ ! -d ${DATA_PATH} ]]; then
+    echo "${DATA_PATH} does not exist"
+fi
+
 mkdir -p ${OUTPUT_PATH}
 
 source venv/bin/activate
