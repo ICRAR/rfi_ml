@@ -8,6 +8,7 @@ OUTPUT_PATH="data/processed"
 
 if [[ ! -d ${DATA_PATH} ]]; then
     echo "${DATA_PATH} does not exist"
+    exit
 fi
 
 

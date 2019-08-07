@@ -9,6 +9,7 @@ SAMPLE_RATE="200000000"
 
 if [[ ! -d ${DATA_PATH} ]]; then
     echo "${DATA_PATH} does not exist"
+    exit
 fi
 
 mkdir -p ${OUTPUT_PATH}
