@@ -1,6 +1,8 @@
 # rfi_ml
 Machine learning code for RFI 
 
+All of the scripts in this file must be run from the root of the repository.
+
 ## Installation
 Virtual Env installation
 ```bash
@@ -11,6 +13,18 @@ pip install virtualenv
 virtualenv venv
 source venv/bin/activate
 pip install scripts/requirements.txt
+
+# Install pyvex for reading .vex files
+python pyvex/setup.py install
+```
+
+## Preprocessing
+```bash
+# Preprocess power line data
+bash data/preprocess_india_txt.sh
+
+# Preprocess vlba data
+bash data/preprocess_vlba.sh
 ```
 
 ## Documentation Generation
@@ -20,16 +34,26 @@ pdoc3 --html src --force
 ```
 The documentation will be available in `html` for browsing.
 
-
-
 ## Configuration
-`config.py` contains the GAN configuration file parser. This script can be run directly to produce a default `gan_config.settings` file containing a default configuration.
+Default config file creation
+```bash
+source venv/bin/activate
+python -m src.config
+```
+The config file will be created in the root of the repository
+
+## Training
+```bash
+source venv/bin/activate
+# Train using the config file in the root
+python -m src.train gan_config.settings
+```
 
 **Configuration Options**
 
 `USE_CUDA` - True to train using the GPU, false to use the CPU (defaults to true).
 
-`FILENAME` - Path to HDF5 file to load data from.
+`FILENAME` - Path to HDF5 file to load data from, relative to the repository root.
 
 `MAX_EPOCHS` - Max number of epochs to train the GAN for (defaults to 60).
 
@@ -53,10 +77,14 @@ The documentation will be available in `html` for browsing.
 
 `REQUEUE_SCRIPT` - If REQUEUE_EPOCHS > 0, this script will be called to requeue the training script.
 
+`CHECKPOINT_DIRECTORY` - The directory to write checkpoints to, relative to the repository root.
+
+`RESULT_DIRECTORY` - The directory to write results to, relative to the repository root.
+
 **Example**
 ```text
 USE_CUDA = True
-FILENAME = ../data/processed/v255ae_At_072_060000_fft.hdf5
+FILENAME = data/processed/v255ae_At_072_060000_fft.hdf5
 MAX_EPOCHS = 60
 MAX_AUTOENCODER_EPOCHS = 60
 MAX_SAMPLES = 0
@@ -65,8 +93,7 @@ NORMALISE = True
 ADD_DROPOUT = False
 ADD_NOISE = False
 REQUEUE_EPOCHS = 0
-REQUEUE_SCRIPT = ./requeue.sh
-CHECKPOINT_DIRECTORY = ../data/checkpoints
-RESULT_DIRECTORY = ../data/results/
-
+REQUEUE_SCRIPT = ""
+CHECKPOINT_DIRECTORY = data/checkpoints
+RESULT_DIRECTORY = data/results/
 ```

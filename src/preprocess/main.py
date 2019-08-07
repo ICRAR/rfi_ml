@@ -140,6 +140,5 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     LOG.info('Starting with args: {0}'.format(args))
-    main = PreprocessorMain()
-    main.run(args['input'], args['output'], **args)
+    main(args['input'], args['output'], **args)
 

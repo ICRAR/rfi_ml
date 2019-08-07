@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 
-PYTHON="../venv/bin/python"
-PREPROCESS="../src/gan/preprocess/main.py"
-PREPROCESS_FFT="../src/gan/preprocess/fft/main.py"
-DATA_PATH="./raw/vlba"
-OUTPUT_PATH="./processed"
+PYTHON="python -m"
+PREPROCESS="src.preprocess.main"
+PREPROCESS_FFT="src.preprocess.fft.main"
+DATA_PATH="data/raw/vlba"
+OUTPUT_PATH="data/processed"
 
 mkdir -p ${OUTPUT_PATH}
 
+source venv/bin/activate
+
 # Sample rate set to 1000000 for testing. remove to process entire file.
-COMMON_ARGS="--sample_rate 32000000 --max_samples 1000000 --lba_obs_file ./raw/vlba/v255ae.vex"
+COMMON_ARGS="--sample_rate 32000000 --max_samples 1000000 --lba_obs_file data/raw/vlba/v255ae.vex"
 
 ${PYTHON} ${PREPROCESS} ${DATA_PATH}/v255ae_At_072_060000.lba ${OUTPUT_PATH}/v255ae_At_072_060000.hdf5 ${COMMON_ARGS} --lba_antenna_name At
 ${PYTHON} ${PREPROCESS} ${DATA_PATH}/v255ae_Mp_072_060000.lba ${OUTPUT_PATH}/v255ae_Mp_072_060000.hdf5 ${COMMON_ARGS} --lba_antenna_name Mp

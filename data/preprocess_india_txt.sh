@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
-PYTHON="../venv/bin/python"
-PREPROCESS="../src/gan/preprocess/main.py"
-PREPROCESS_FFT="../src/gan/preprocess/fft/main.py"
-DATA_PATH="./raw/power_line_RFI_data"
-OUTPUT_PATH="./processed"
+PYTHON="python -m"
+PREPROCESS="src.preprocess.main"
+PREPROCESS_FFT="src.preprocess.fft.main"
+DATA_PATH="data/raw/power_line_RFI_data"
+OUTPUT_PATH="data/processed"
 SAMPLE_RATE="200000000"
 
 mkdir -p ${OUTPUT_PATH}
+
+source venv/bin/activate
 
 ${PYTHON} ${PREPROCESS} ${DATA_PATH}/C148700000.txt ${OUTPUT_PATH}/C148700000.hdf5 --sample_rate ${SAMPLE_RATE}
 ${PYTHON} ${PREPROCESS} ${DATA_PATH}/C148700001.txt ${OUTPUT_PATH}/C148700001.hdf5 --sample_rate ${SAMPLE_RATE}
