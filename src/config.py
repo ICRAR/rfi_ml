@@ -36,7 +36,7 @@ class Config(object):
 
     defaults = {
         'USE_CUDA':                         Default(True, bool),  # True to train using the GPU, false to use the CPU
-        'FILENAME':                         Default('data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),  # HDF5 file to load data from
+        'FILENAME':                         Default('data/processed/C148700001_fft.hdf5', str),  # HDF5 file to load data from
         'MAX_EPOCHS':                       Default(60, int),  # Max number of epochs to train the GAN for
         'MAX_AUTOENCODER_EPOCHS':           Default(60, int),  # Max number of epochs to train the autoencoder for
         'MAX_SAMPLES':                      Default(0, int),  # Maximum number of inputs to train on. Set to 0 for unlimited

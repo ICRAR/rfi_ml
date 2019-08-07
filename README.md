@@ -83,7 +83,7 @@ python -m src.train gan_config.settings
 **Example**
 ```text
 USE_CUDA = True
-FILENAME = data/processed/v255ae_At_072_060000_fft.hdf5
+FILENAME = data/processed/C148700001_fft.hdf5
 MAX_EPOCHS = 60
 MAX_AUTOENCODER_EPOCHS = 60
 MAX_SAMPLES = 0
@@ -95,4 +95,5 @@ REQUEUE_EPOCHS = 0
 REQUEUE_SCRIPT = ""
 CHECKPOINT_DIRECTORY = data/checkpoints
 RESULT_DIRECTORY = data/results/
+
 ```
