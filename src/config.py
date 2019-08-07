@@ -36,9 +36,9 @@ class Config(object):
 
     defaults = {
         'USE_CUDA':                         Default(True, bool),  # True to train using the GPU, false to use the CPU
-        'FILENAME':                         Default('../../data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),  # HDF5 file to load data from
+        'FILENAME':                         Default('..//data/At_c0p0_c0_p0_s1000000000_fft2048.hdf5', str),  # HDF5 file to load data from
         'MAX_EPOCHS':                       Default(60, int),  # Max number of epochs to train the GAN for
-        'MAX_AUTOENCODER_EPOCHS': Default(60, int),  # Max number of epochs to train the autoencoder for
+        'MAX_AUTOENCODER_EPOCHS':           Default(60, int),  # Max number of epochs to train the autoencoder for
         'MAX_SAMPLES':                      Default(0, int),  # Maximum number of inputs to train on. Set to 0 for unlimited
         'BATCH_SIZE':                       Default(4096, int),  # Number of samples to train on per batch
         'NORMALISE':                        Default(True, bool),  # Set to true to normalise inputs
@@ -46,9 +46,8 @@ class Config(object):
         'ADD_NOISE':                        Default(False, bool),  # if true, add noise to the inputs before passing them into the network
         'REQUEUE_EPOCHS':                   Default(0, int),  # if > 0, perform REQUEUE_EPOCHS of training, stop, then run the REQUEUE_SCRIPT
         'REQUEUE_SCRIPT':                   Default("", str),  # if REQUEUE_EPOCHS > 0, this script will be called to requeue the training script
-        'CHECKPOINT_USE_SAVE_PROCESS':      Default(False, bool),  # Use a process for saving checkpoints to speed up the training loop
-        'CHECKPOINT_DIRECTORY':             Default("./checkpoints", str),
-        'RESULT_DIRECTORY':                 Default("./results", str)
+        'CHECKPOINT_DIRECTORY':             Default("../data/checkpoints", str),
+        'RESULT_DIRECTORY':                 Default("../data/results/", str)
     }
 
     @classmethod

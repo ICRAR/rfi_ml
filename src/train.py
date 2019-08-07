@@ -62,9 +62,11 @@ class Train(object):
         self.config = config
 
         LOG.info("CUDA version: {0}".format(version.cuda))
-        LOG.info("Creating data loader from path {0}".format(config.FILENAME))
 
-        self.data_loader = Data(config.FILENAME,
+        file_path = os.path.abspath(config.FILENAME)
+        LOG.info("Creating data loader from path {0}".format(file_path))
+
+        self.data_loader = Data(file_path,
                                 config.BATCH_SIZE,
                                 horizontal_concatenate=True,            # Concat abs and angles together into one big array for each input
                                 max_inputs=config.MAX_SAMPLES,          # Max inputs per polarisation and frequency
@@ -188,7 +190,7 @@ class Train(object):
 
         vis_path = os.path.join(
             self.config.RESULT_DIRECTORY,
-            os.path.splitext(self.config.FILENAME)[0], "autoencoder", str(datetime.now())
+            os.path.splitext(os.path.basename(self.config.FILENAME))[0], "autoencoder", str(datetime.now())
         )
         with Visualiser(vis_path) as vis:
             epochs_complete = 0
@@ -273,7 +275,7 @@ class Train(object):
 
         vis_path = os.path.join(
             self.config.RESULT_DIRECTORY,
-            os.path.splitext(self.config.FILENAME)[0], "gan", str(datetime.now())
+            os.path.splitext(os.path.basename(self.config.FILENAME))[0], "gan", str(datetime.now())
         )
         with Visualiser(vis_path) as vis:
             real_labels = None  # all 1s

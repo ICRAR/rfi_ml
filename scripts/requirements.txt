@@ -9,3 +9,4 @@ scipy
 setuptools
 torch
 torchvision
+pdoc3
