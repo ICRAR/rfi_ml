@@ -29,6 +29,9 @@ Run this file directly to invoke the preprocessor.
 import os
 import argparse
 import logging
+import tarfile
+
+from preprocess.preprocess_india_tar import PreprocessReaderIndiaTAR
 from .preprocess_lba import PreprocessReaderLBA
 from .preprocess_india_txt import PreprocessReaderIndiaTXT
 from .hdf5_definition import HDF5Observation
@@ -38,12 +41,15 @@ LOG = logging.getLogger(__name__)
 
 _preprocess_readers = {
     '.lba': PreprocessReaderLBA,
-    '.txt': PreprocessReaderIndiaTXT
+    '.txt': PreprocessReaderIndiaTXT,
+    'india_tar': PreprocessReaderIndiaTAR
 }
 
 
 def _get_preprocessor(filename, **kwargs):
-    _, ext = os.path.splitext(filename)
+    ext = kwargs.get("mode", None)
+    if ext is None:
+        _, ext = os.path.splitext(filename)
     constructor = _preprocess_readers.get(ext, None)
     if constructor is None:
         raise Exception('Unknown input file type {0}'.format(ext))
@@ -65,17 +71,29 @@ def main(infilename, outfilename, **kwargs):
     kwargs
         Arguments for the chosen preprocessor as provided by `parse_args`
     """
-    with HDF5Observation(outfilename, mode='w') as observation, open(infilename, 'r') as infile:
-        try:
-            preprocessor, file_type = _get_preprocessor(infilename, **kwargs)
+    if kwargs.get("mode") == "india_tar":
+        # India tar produces multiple output files from a single input file
+        with tarfile.open(infilename, 'r') as f:
+            for info in map(lambda x: x.name.startswith("C") and x.name.endswith("txt"), f.getmembers()):
+                tempfilename = f"{os.tmpnam()}.txt"
+                trueoutfilename = os.path.join(outfilename, os.path.basename(info.name))
+                print(f"Extracting {info.name} to {tempfilename}, then producing {trueoutfilename} as output")
+                with open(tempfilename, 'w') as tmp:
+                    f.extractfile(info).readinto(tmp)
+                args_copy = {**kwargs, "mode": ".txt"}
+                main(tempfilename, trueoutfilename, args_copy)
+    else:
+        with HDF5Observation(outfilename, mode='w') as observation, open(infilename, 'r') as infile:
+            try:
+                preprocessor, file_type = _get_preprocessor(infilename, **kwargs)
 
-            observation.write_defaults()
-            observation.original_file_name = os.path.basename(infilename)
-            observation.original_file_type = file_type
+                observation.write_defaults()
+                observation.original_file_name = os.path.basename(infilename)
+                observation.original_file_type = file_type
 
-            preprocessor.preprocess(infilename, infile, observation)
-        except:
-            LOG.exception('Failed to run preprocessor')
+                preprocessor.preprocess(infilename, infile, observation)
+            except:
+                LOG.exception('Failed to run preprocessor')
 
 
 def parse_args():
@@ -111,6 +129,9 @@ def parse_args():
     )
     parser.add_argument('input', help='The input file')
     parser.add_argument('output', help='The output HDF5 file')
+    parser.add_argument('--mode',
+                        type=str,
+                        help='Force a specific parsing mode')
     parser.add_argument('--max_samples',
                         type=int,
                         default=0,
